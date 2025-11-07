@@ -24,4 +24,5 @@ const userschema = new mongoose.Schema({
 // Add passport-local-mongoose to the schema
 userschema.plugin(passportLocalMongoose);  // Adds methods like authenticate(), register(), etc.
 
-module.exports=mongoose.model("users",userschema);
+module.exports = mongoose.models.User || mongoose.model('User', userSchema);
+
