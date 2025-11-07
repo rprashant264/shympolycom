@@ -4,8 +4,6 @@ const mongoose = require('mongoose');
 const userModel = require("./users");
 const postModel = require("./posts");
 const passport = require('passport');
-const localStrategy = require("passport-local");
-passport.use(new localStrategy(userModel.authenticate()));
 const upload = require('./multer');
 
 // Import all models
@@ -26,11 +24,30 @@ router.get('/', (req, res) => {
 // Dashboard / Home (Protected)
 router.get('/home', isLoggedIn, async (req, res) => {
   try {
+    console.log('Accessing /home route');
+    console.log('Session:', req.session);
+    console.log('User:', req.user);
+    
+    if (!req.session.passport || !req.session.passport.user) {
+      console.log('No user in session, redirecting to login');
+      return res.redirect('/login');
+    }
+
     const user = await userModel
       .findOne({ username: req.session.passport.user })
       .populate('posts')
       .lean();
+    
+    if (!user) {
+      console.log('User not found in database');
+      req.logout(err => {
+        if (err) console.error('Error during logout:', err);
+        res.redirect('/login');
+      });
+      return;
+    }
 
+    console.log('User found:', user.username);
     // Prepare dashboard stats
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -119,13 +136,49 @@ router.get('/login', (req, res) => {
 });
 
 // Login Auth
-router.post('/login',
-  passport.authenticate('local', {
-    successRedirect: '/home',
-    failureRedirect: '/login',
-    failureFlash: true
-  })
-);
+router.post('/login', (req, res, next) => {
+  console.log('Login attempt for username:', req.body.username);
+  
+  if (!req.body.username || !req.body.password) {
+    console.log('Missing credentials');
+    req.flash('error', 'Please enter both username and password');
+    return res.redirect('/login');
+  }
+
+  passport.authenticate('local', (err, user, info) => {
+    console.log('Inside passport.authenticate callback');
+    console.log('Error:', err);
+    console.log('User:', user);
+    console.log('Info:', info);
+    
+    if (err) {
+      console.error('Authentication error:', err);
+      req.flash('error', 'An error occurred during authentication');
+      return res.redirect('/login');
+    }
+    
+    if (!user) {
+      console.log('Login failed. Info:', info);
+      req.flash('error', info.message || 'Invalid username or password');
+      return res.redirect('/login');
+    }
+
+    req.logIn(user, (err) => {
+      console.log('Inside req.logIn callback');
+      if (err) {
+        console.error('Login error:', err);
+        req.flash('error', 'An error occurred during login');
+        return res.redirect('/login');
+      }
+
+      console.log('Login successful for user:', user.username);
+      console.log('Session ID:', req.sessionID);
+      console.log('Session:', req.session);
+      req.flash('success', 'Welcome back!');
+      res.redirect('/home');
+    });
+  })(req, res, next);
+});
 
 // Logout
 router.get('/logout', (req, res, next) => {
@@ -933,7 +986,22 @@ router.get('/sales', isLoggedIn, async (req, res, next) => {
 
 // Auth middleware
 function isLoggedIn(req, res, next) {
-  if (req.isAuthenticated()) return next();
+  console.log('=== isLoggedIn Middleware ===');
+  console.log('Auth check - isAuthenticated:', req.isAuthenticated());
+  console.log('Session ID:', req.sessionID);
+  console.log('Session:', req.session);
+  console.log('User:', req.user);
+  console.log('Cookies:', req.cookies);
+  console.log('=========================');
+
+  if (req.isAuthenticated()) {
+    console.log('User is authenticated, proceeding to next middleware');
+    return next();
+  }
+  
+  console.log('User is not authenticated, redirecting to login');
+  // Store the requested URL for redirection after login
+  req.session.returnTo = req.originalUrl;
   res.redirect('/login');
 }
 

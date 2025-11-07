@@ -1,10 +1,6 @@
 const mongoose = require('mongoose');
 const passportLocalMongoose = require('passport-local-mongoose');  // Import passport-local-mongoose
-//for docker MongoDB mongoose.connect("mongodb://admin:admin123@localhost:27017/myapp?authSource=admin")
-// for local MongoDB connection
-mongoose.connect("mongodb://127.0.0.1:27017/myapp")
-  .then(() => console.log('MongoDB connected'))
-  .catch(err => console.error('MongoDB connection error:', err));
+// Database connection is handled in config/database.js
 
 // Define the schema for users
 const userschema = new mongoose.Schema({
