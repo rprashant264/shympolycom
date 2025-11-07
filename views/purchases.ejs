@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Purchases</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+  <style>
+    body { background-color: #f8f9fa; }
+    .inventory-table { padding: 5% 5%; background: #fff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    .table-header { background-color: #f8f9fa; font-weight: 600; }
+    .table-responsive { border-radius: 8px; }
+    .page-wrapper { padding: 1.5rem 0; }
+  </style>
+</head>
+<body>
+  <%- include('partials/nav', { current: 'purchases' }) %>
+
+  <div class="container mt-4 page-wrapper">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <h2>Purchases</h2>
+      <button id="newPurchaseBtn" class="btn btn-primary">
+        <i class="fas fa-plus me-2"></i>Add Purchase
+      </button>
+    </div>
+
+    <!-- Search Bar -->
+    <div class="row mb-4">
+      <div class="col-md-6">
+        <div class="input-group">
+          <input type="text" id="purchasesSearchInput" class="form-control" placeholder="Search by HSN, Product or Vendor...">
+          <button class="btn btn-outline-secondary" type="button" id="purchasesSearchButton">
+            <i class="fas fa-search"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="table-responsive inventory-table">
+      <table class="table table-hover mb-0 align-middle">
+        <thead class="table-header">
+          <tr>
+            <th>HSN Code</th>
+            <th>Product Name</th>
+            <th>Vendor</th>
+            <th>Date</th>
+            <th>Units</th>
+            <th>Cost</th>
+            <th>Amount</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+  <tbody id="purchasesTbody">
+          <% if (typeof purchases !== 'undefined' && purchases.length > 0) { %>
+            <% purchases.forEach(p => { %>
+              <tr data-id="<%= p._id %>" data-product-ref="<%= p.productRef || '' %>" data-units="<%= p.units %>" data-cost="<%= p.cost %>" data-vendor="<%= p.vendor %>" data-vendor-ref="<%= p.vendorRef || '' %>" data-date="<%= p.date %>">
+                <td><%= p.hsnCode %></td>
+                <td><%= p.productName %></td>
+                <td><%= p.vendor %></td>
+                <td><%= p.date %></td>
+                <td><%= p.units %></td>
+                <td>₹<%= Number(p.cost).toFixed(2) %></td>
+                <td>₹<%= Number(p.amount).toFixed(2) %></td>
+                <td>
+                  <button class="btn btn-sm btn-outline-primary me-1 btn-edit" title="Edit"><i class="fas fa-edit"></i></button>
+                  <button class="btn btn-sm btn-outline-danger btn-delete" title="Delete"><i class="fas fa-trash"></i></button>
+                </td>
+              </tr>
+            <% }); %>
+          <% } else { %>
+
+          <% } %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Add Purchase Modal -->
+  <div class="modal fade" id="addPurchaseModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <form id="addPurchaseForm" class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Add Purchase</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div id="addPurchaseError" class="alert alert-danger d-none"></div>
+          <div class="mb-3">
+            <label class="form-label">Product</label>
+            <select id="purchaseProductSelect" class="form-select" aria-label="Select product"></select>
+            <input type="hidden" name="productRef" id="purchaseProductRef">
+          </div>
+          <div class="mb-3"><label class="form-label">HSN Code</label><input name="hsnCode" id="purchaseHsn" class="form-control" readonly></div>
+          <div class="mb-3"><label class="form-label">Product Name</label><input name="productName" id="purchaseProductName" class="form-control" readonly></div>
+          <div class="mb-3">
+            <label class="form-label">Vendor</label>
+            <select id="purchaseVendorSelect" class="form-select"></select>
+            <input type="hidden" name="vendorId" id="purchaseVendorId">
+          </div>
+          <div class="mb-3"><label class="form-label">Date</label><input name="date" type="date" class="form-control"></div>
+          <div class="mb-3"><label class="form-label">Units</label><input name="units" type="number" class="form-control" required></div>
+          <div class="mb-3"><label class="form-label">Cost (per unit)</label><input name="cost" type="number" step="0.01" class="form-control" required></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Add Purchase</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    const newPurchaseBtn = document.getElementById('newPurchaseBtn');
+    if (newPurchaseBtn) {
+      newPurchaseBtn.setAttribute('data-bs-toggle', 'modal');
+      newPurchaseBtn.setAttribute('data-bs-target', '#addPurchaseModal');
+    }
+    // ensure Add mode when clicking New
+    if (newPurchaseBtn) newPurchaseBtn.addEventListener('click', () => {
+      editingPurchaseId = null;
+      const title = addPurchaseModalEl.querySelector('.modal-title'); if (title) title.textContent = 'Add Purchase';
+      const submitBtn = addPurchaseModalEl.querySelector('button[type="submit"]'); if (submitBtn) submitBtn.textContent = 'Add Purchase';
+    });
+
+  const addPurchaseForm = document.getElementById('addPurchaseForm');
+  const addPurchaseError = document.getElementById('addPurchaseError');
+  const purchasesTbody = document.getElementById('purchasesTbody');
+  const purchaseProductSelect = document.getElementById('purchaseProductSelect');
+    const purchaseProductRef = document.getElementById('purchaseProductRef');
+    const purchaseHsn = document.getElementById('purchaseHsn');
+    const purchaseProductName = document.getElementById('purchaseProductName');
+  const purchaseVendorSelect = document.getElementById('purchaseVendorSelect');
+  const purchaseVendorId = document.getElementById('purchaseVendorId');
+
+  // Search elements for purchases
+  const purchasesSearchInput = document.getElementById('purchasesSearchInput');
+  const purchasesSearchButton = document.getElementById('purchasesSearchButton');
+
+  function performPurchasesSearch(term) {
+    term = (term || '').toLowerCase();
+    const rows = [...purchasesTbody.querySelectorAll('tr')];
+    rows.forEach(row => {
+      if (row.querySelector('td[colspan]')) {
+        row.style.display = term ? 'none' : '';
+        return;
+      }
+      const cells = row.cells;
+      const hsn = (cells[0]?.textContent || '').toLowerCase();
+      const productName = (cells[1]?.textContent || '').toLowerCase();
+      const vendor = (cells[2]?.textContent || '').toLowerCase();
+      if (hsn.includes(term) || productName.includes(term) || vendor.includes(term)) {
+        row.style.display = '';
+      } else {
+        row.style.display = 'none';
+      }
+    });
+  }
+
+  if (purchasesSearchInput) purchasesSearchInput.addEventListener('input', (e) => performPurchasesSearch(e.target.value));
+  if (purchasesSearchButton) purchasesSearchButton.addEventListener('click', () => performPurchasesSearch(purchasesSearchInput.value));
+
+    // editing flag (null when adding, id when editing)
+    let editingPurchaseId = null;
+
+    // Load products for the select when the modal is shown (only for Add mode)
+    const addPurchaseModalEl = document.getElementById('addPurchaseModal');
+    addPurchaseModalEl.addEventListener('show.bs.modal', async () => {
+      try {
+  if (editingPurchaseId) return; // editing path will populate the select itself
+  const res = await fetch('/api/products');
+        if (!res.ok) return;
+  const products = await res.json();
+  purchaseProductSelect.innerHTML = '<option value="">-- Select product --</option>' + products.map(p => `<option value="${p._id}" data-hsn="${p.hsnCode}" data-name="${p.productName}">${p.productName} (${p.hsnCode})</option>`).join('');
+      } catch (e) {
+        console.error('Failed to load products for purchase modal', e);
+      }
+    });
+
+    // Reset editing state when modal is hidden
+    addPurchaseModalEl.addEventListener('hidden.bs.modal', () => {
+      editingPurchaseId = null;
+      // reset modal title and submit button
+      const title = addPurchaseModalEl.querySelector('.modal-title'); if (title) title.textContent = 'Add Purchase';
+      const submitBtn = addPurchaseModalEl.querySelector('button[type="submit"]'); if (submitBtn) submitBtn.textContent = 'Add Purchase';
+      addPurchaseError.classList.add('d-none');
+    });
+
+    purchaseProductSelect.addEventListener('change', (e) => {
+      const opt = e.target.selectedOptions[0];
+      if (!opt || !opt.value) {
+        purchaseHsn.value = '';
+        purchaseProductName.value = '';
+        purchaseProductRef.value = '';
+        // clear vendors
+        if (purchaseVendorSelect) purchaseVendorSelect.innerHTML = '<option value="">-- Select product first --</option>';
+        if (purchaseVendorId) purchaseVendorId.value = '';
+        return;
+      }
+      purchaseHsn.value = opt.dataset.hsn || '';
+      purchaseProductName.value = opt.dataset.name || '';
+      purchaseProductRef.value = opt.value;
+      // load vendors for this product
+      if (purchaseVendorSelect) {
+        fetch(`/api/vendors?productId=${opt.value}`).then(r => r.ok ? r.json() : []).then(list => {
+          purchaseVendorSelect.innerHTML = '<option value="">-- Select vendor --</option>' + list.map(v => `<option value="${v._id}">${v.name}</option>`).join('');
+          if (purchaseVendorId) purchaseVendorId.value = ''; // clear any previous vendorId when product changes
+        }).catch(err => console.error('Failed to load vendors', err));
+      }
+    });
+
+    // Handle vendor selection
+    purchaseVendorSelect.addEventListener('change', (e) => {
+      const opt = e.target.selectedOptions[0];
+      if (purchaseVendorId) {
+        purchaseVendorId.value = opt && opt.value ? opt.value : '';
+      }
+    });
+
+    
+
+    addPurchaseForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const data = Object.fromEntries(new FormData(addPurchaseForm));
+  // ensure productRef is set from the select
+  if (!data.productRef && purchaseProductSelect.value) data.productRef = purchaseProductSelect.value;
+  // ensure vendorId is set
+  if (!data.vendorId && purchaseVendorSelect && purchaseVendorSelect.value) data.vendorId = purchaseVendorSelect.value;
+      try {
+        if (editingPurchaseId) {
+          const res = await fetch(`/purchases/${editingPurchaseId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+          if (!res.ok) { const err = await res.json(); throw new Error(err.error || 'Failed to update purchase'); }
+          const updated = await res.json();
+          const row = purchasesTbody.querySelector(`tr[data-id="${editingPurchaseId}"]`);
+          if (row) {
+            row.dataset.productRef = updated.productRef || '';
+            row.dataset.units = updated.units || 0;
+            row.dataset.cost = updated.cost || 0;
+            row.dataset.vendor = updated.vendor || '';
+            row.dataset.vendorRef = updated.vendorRef || '';  // Make sure this attribute is updated
+            row.dataset.date = updated.date || '';
+            row.innerHTML = `<td>${updated.hsnCode}</td><td>${updated.productName}</td><td>${updated.vendor}</td><td>${updated.date ? updated.date.toString().slice(0,10) : ''}</td><td>${updated.units}</td><td>₹${Number(updated.cost).toFixed(2)}</td><td>₹${Number(updated.amount).toFixed(2)}</td><td><button class="btn btn-sm btn-outline-primary me-1 btn-edit"><i class="fas fa-edit"></i></button><button class="btn btn-sm btn-outline-danger btn-delete"><i class="fas fa-trash"></i></button></td>`;
+          }
+          editingPurchaseId = null;
+          addPurchaseForm.reset();
+          bootstrap.Modal.getInstance(addPurchaseModalEl).hide();
+          return;
+        }
+
+        const res = await fetch('/purchases', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+        if (!res.ok) {
+          const err = await res.json(); throw new Error(err.error || 'Failed to create purchase');
+        }
+        const created = await res.json();
+  const row = document.createElement('tr'); row.dataset.id = created._id;
+  row.dataset.productRef = created.productRef || '';
+        row.dataset.units = created.units || 0;
+        row.dataset.cost = created.cost || 0;
+        row.dataset.vendor = created.vendor || '';
+        row.dataset.vendorRef = created.vendorRef || ''; // Keep this for edit mode
+        row.dataset.date = created.date ? created.date.toString().slice(0,10) : '';
+        row.innerHTML = `<td>${created.hsnCode}</td><td>${created.productName}</td><td>${created.vendor}</td><td>${created.date ? created.date.toString().slice(0,10) : ''}</td><td>${created.units}</td><td>₹${Number(created.cost).toFixed(2)}</td><td>₹${Number(created.amount).toFixed(2)}</td><td><button class="btn btn-sm btn-outline-primary me-1 btn-edit"><i class="fas fa-edit"></i></button><button class="btn btn-sm btn-outline-danger btn-delete"><i class="fas fa-trash"></i></button></td>`;
+        purchasesTbody.appendChild(row);
+        bootstrap.Modal.getInstance(addPurchaseModalEl).hide();
+        addPurchaseForm.reset();
+      } catch (err) {
+        addPurchaseError.textContent = err.message; addPurchaseError.classList.remove('d-none');
+      }
+    });
+
+    // delegate edit/delete for purchases
+    purchasesTbody.addEventListener('click', async (e) => {
+      const btn = e.target.closest('button'); if (!btn) return;
+      const tr = btn.closest('tr'); const id = tr.dataset.id;
+      if (btn.classList.contains('btn-delete')) {
+        if (!confirm('Delete this purchase?')) return;
+        try {
+          const res = await fetch(`/purchases/${id}`, { method: 'DELETE' });
+          if (!res.ok) { const err = await res.json(); throw new Error(err.error || 'Failed to delete'); }
+          tr.remove();
+        } catch (err) { alert(err.message || 'Delete failed'); }
+      }
+      if (btn.classList.contains('btn-edit')) {
+        try {
+          // populate form with row data
+          const productRef = tr.dataset.productRef || '';
+          const vendor = tr.dataset.vendor || '';
+          const vendorRef = tr.dataset.vendorRef || '';
+          const date = tr.dataset.date || '';
+          const units = tr.dataset.units || '';
+          const cost = tr.dataset.cost || '';
+
+          // load products and set selected
+          const pRes = await fetch('/api/products');
+          if (pRes.ok) {
+            const products = await pRes.json();
+            purchaseProductSelect.innerHTML = '<option value="">-- Select product --</option>' + products.map(p => `<option value="${p._id}" data-hsn="${p.hsnCode}" data-name="${p.productName}">${p.productName} (${p.hsnCode})</option>`).join('');
+            if (productRef) purchaseProductSelect.value = productRef;
+            const opt = purchaseProductSelect.selectedOptions[0];
+            if (opt) {
+              purchaseHsn.value = opt.dataset.hsn || '';
+              purchaseProductName.value = opt.dataset.name || '';
+              purchaseProductRef.value = opt.value || '';
+            }
+          }
+
+          // load vendors for this product and select vendorRef
+          if (productRef) {
+            try {
+              const vRes = await fetch(`/api/vendors?productId=${productRef}`);
+              if (vRes.ok) {
+                const vlist = await vRes.json();
+                purchaseVendorSelect.innerHTML = '<option value="">-- Select vendor --</option>' + vlist.map(v => `<option value="${v._id}">${v.name}</option>`).join('');
+                if (vendorRef) {
+                  purchaseVendorSelect.value = vendorRef;
+                  if (purchaseVendorId) purchaseVendorId.value = vendorRef; // ensure hidden input tracks preselected vendor
+                }
+              }
+            } catch (err) { console.error('Failed to load vendors for edit', err); }
+          }
+
+          addPurchaseForm.querySelector('input[name="date"]').value = date;
+          addPurchaseForm.querySelector('input[name="units"]').value = units;
+          addPurchaseForm.querySelector('input[name="cost"]').value = cost;
+
+          editingPurchaseId = id;
+          // set modal to edit mode
+          const title = addPurchaseModalEl.querySelector('.modal-title'); if (title) title.textContent = 'Edit Purchase';
+          const submitBtn = addPurchaseModalEl.querySelector('button[type="submit"]'); if (submitBtn) submitBtn.textContent = 'Save Changes';
+          const modal = new bootstrap.Modal(addPurchaseModalEl); modal.show();
+        } catch (err) {
+          console.error('Failed to prepare edit', err);
+          alert('Failed to prepare edit');
+        }
+      }
+    });
+  </script>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

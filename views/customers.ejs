@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Customers</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+  <style>
+    body { background-color: #f8f9fa; }
+    .inventory-table {  padding: 5% 5%;background: #fff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    .table-header { background-color: #f8f9fa; font-weight: 600; }
+    .table-responsive { border-radius: 8px; }
+    .page-wrapper { padding: 1.5rem 0; }
+  </style>
+</head>
+<body>
+  <%- include('partials/nav', { current: 'customers' }) %>
+
+  <div class="container mt-4 page-wrapper">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h3 class="mb-0">Customers</h3>
+      <button id="newCustomerBtn" class="btn btn-primary">
+        <i class="fas fa-plus me-2"></i>New Customer
+      </button>
+    </div>
+
+    <!-- Search Bar -->
+    <div class="row mb-3">
+      <div class="col-md-6">
+        <div class="input-group">
+          <input type="text" id="searchInput" class="form-control" placeholder="Search by Cust_ID or Name...">
+          <button class="btn btn-outline-secondary" type="button" id="searchButton">
+            <i class="fas fa-search"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="table-responsive inventory-table">
+      <table class="table table-hover mb-0 align-middle">
+        <thead class="table-header">
+          <tr>
+            <th>Cust_ID</th>
+            <th>Name</th>
+            <th>Email</th>
+            <th>Address</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% if (typeof customers !== 'undefined' && customers.length > 0) { %>
+            <% customers.forEach(c => { %>
+              <tr data-id="<%= c._id %>" data-phone="<%= c.phone || '' %>">
+                <td><%= c.custId %></td>
+                <td><%= c.name %></td>
+                <td><%= c.email %></td>
+                <td><%= c.address %></td>
+                <td>
+                  <button class="btn btn-sm btn-outline-primary me-1 btn-edit" title="Edit"><i class="fas fa-edit"></i></button>
+                  <button class="btn btn-sm btn-outline-danger btn-delete" title="Delete"><i class="fas fa-trash"></i></button>
+                </td>
+              </tr>
+            <% }); %>
+          <% } else { %>
+          <% } %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Add Customer Modal -->
+  <div class="modal fade" id="addCustomerModal" tabindex="-1" aria-labelledby="addCustomerModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <form id="addCustomerForm" class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Add New Customer</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div id="addCustomerError" class="alert alert-danger d-none"></div>
+          <div class="mb-3"><label class="form-label">Name</label><input name="name" class="form-control" required></div>
+          <div class="mb-3"><label class="form-label">Email</label><input name="email" type="email" class="form-control" required></div>
+          <div class="mb-3"><label class="form-label">Phone</label><input name="phone" class="form-control"></div>
+          <div class="mb-3"><label class="form-label">Address</label><input name="address" class="form-control" required></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Add Customer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    const addCustomerModal = document.getElementById('addCustomerModal');
+    const addCustomerForm = document.getElementById('addCustomerForm');
+    const addCustomerError = document.getElementById('addCustomerError');
+    const customersTbody = document.querySelector('tbody');
+
+    // open modal from header button
+    const newCustomerBtn = document.getElementById('newCustomerBtn');
+    if (newCustomerBtn) {
+      newCustomerBtn.setAttribute('data-bs-toggle', 'modal');
+      newCustomerBtn.setAttribute('data-bs-target', '#addCustomerModal');
+    }
+
+    let editingCustomerId = null;
+
+    addCustomerForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const data = Object.fromEntries(new FormData(addCustomerForm));
+      try {
+        if (editingCustomerId) {
+          const res = await fetch(`/customers/${editingCustomerId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+          if (!res.ok) {
+            const err = await res.json(); throw new Error(err.error || 'Failed to update customer');
+          }
+          const updated = await res.json();
+          const row = customersTbody.querySelector(`tr[data-id="${editingCustomerId}"]`);
+          if (row) row.innerHTML = `<td>${updated.custId}</td><td>${updated.name}</td><td>${updated.email}</td><td>${updated.address}</td><td><button class="btn btn-sm btn-outline-primary me-1 btn-edit"><i class="fas fa-edit"></i></button><button class="btn btn-sm btn-outline-danger btn-delete"><i class="fas fa-trash"></i></button></td>`;
+          editingCustomerId = null;
+          addCustomerForm.reset();
+          bootstrap.Modal.getInstance(addCustomerModal).hide();
+          return;
+        }
+
+        const res = await fetch('/customers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+        if (!res.ok) {
+          const err = await res.json(); throw new Error(err.error || 'Failed to create customer');
+        }
+        const created = await res.json();
+        const row = document.createElement('tr'); row.dataset.id = created._id;
+        row.innerHTML = `<td>${created.custId}</td><td>${created.name}</td><td>${created.email}</td><td>${created.address}</td><td><button class="btn btn-sm btn-outline-primary me-1 btn-edit"><i class="fas fa-edit"></i></button><button class="btn btn-sm btn-outline-danger btn-delete"><i class="fas fa-trash"></i></button></td>`;
+        customersTbody.appendChild(row);
+        addCustomerForm.reset();
+        bootstrap.Modal.getInstance(addCustomerModal).hide();
+      } catch (err) {
+        addCustomerError.textContent = err.message; addCustomerError.classList.remove('d-none');
+      }
+    });
+
+    // Delegate edit/delete actions
+    customersTbody.addEventListener('click', async (e) => {
+      const btn = e.target.closest('button');
+      if (!btn) return;
+      const tr = btn.closest('tr');
+      const id = tr.dataset.id;
+      if (btn.classList.contains('btn-delete')) {
+        if (!confirm('Delete this customer?')) return;
+        try {
+          const res = await fetch(`/customers/${id}`, { method: 'DELETE' });
+          if (!res.ok) { const err = await res.json(); throw new Error(err.error || 'Failed to delete'); }
+          tr.remove();
+        } catch (err) {
+          alert(err.message || 'Delete failed');
+        }
+      }
+      if (btn.classList.contains('btn-edit')) {
+        // populate form and switch to edit mode
+        const cells = tr.querySelectorAll('td');
+        addCustomerForm.querySelector('input[name="name"]').value = cells[1].textContent.trim();
+        addCustomerForm.querySelector('input[name="email"]').value = cells[2].textContent.trim();
+        addCustomerForm.querySelector('input[name="phone"]').value = tr.dataset.phone || '';
+        addCustomerForm.querySelector('input[name="address"]').value = cells[3].textContent.trim();
+        editingCustomerId = id;
+        // show modal
+        const modal = new bootstrap.Modal(addCustomerModal); modal.show();
+      }
+    });
+  </script>
+
+  <script>
+    // Get DOM elements
+    const searchInput = document.getElementById('searchInput');
+    const searchButton = document.getElementById('searchButton');
+    const tbody = document.querySelector('tbody');
+
+    // Store original rows for search functionality
+    let originalRows = [...tbody.querySelectorAll('tr')];
+
+    // Search functionality
+    function performSearch(searchTerm) {
+      searchTerm = searchTerm.toLowerCase();
+      const rows = [...tbody.querySelectorAll('tr')];
+
+      rows.forEach(row => {
+        const custId = row.cells[0]?.textContent.toLowerCase() || '';
+        const name = row.cells[1]?.textContent.toLowerCase() || '';
+
+        if (custId.includes(searchTerm) || name.includes(searchTerm)) {
+          row.style.display = '';
+        } else {
+          row.style.display = 'none';
+        }
+      });
+    }
+
+    searchInput.addEventListener('input', (e) => {
+      performSearch(e.target.value);
+    });
+
+    searchButton.addEventListener('click', () => {
+      performSearch(searchInput.value);
+    });
+  </script>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

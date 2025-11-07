@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Document</title>
+  <link rel="stylesheet" href="/stylesheets/style.css">
+</head>
+<body>
+  <div class="container">
+    <div class="content">
+      <!--pinterest logo-->
+      <img src="/images/logo.jpg" alt="pin logo" class="img1" onerror="console.error('Logo failed to load:', this.src)" />
+      <p class="header">Create Account to see more</p>
+      <form action="/register" method="post">
+      <input type="email" name="username" placeholder="Email" class="detail" /><br />
+      <input type="password" name="password" placeholder="Password" class="detail" />
+      <input type="text" name="fullname" placeholder="Full Name" class="detail" /><br />
+      <input type="text" name="secret" placeholder="Secret Code" class="detail" />
+      <input type="submit" value="Create Account" class="btn int"></input>
+    </form>
+      <h4>Forgot your password?</h4>
+
+
+    </div>
+  </div>
+  <div class="upbtn" onclick="window.location.href='/login'">Login</div>
+
+
+</body>
+</html>

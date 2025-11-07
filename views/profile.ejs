@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Profile Page</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="/stylesheets/profile.css">
+</head>
+<body>
+
+    <!-- Profile Section -->
+    <div class="container d-flex justify-content-center mt-4">
+        <div class="card text-center p-4 shadow-sm">
+            <div class="profile-picture">
+                <img src="https://images.unsplash.com/photo-1457449940276-e8deed18bfff?q=80&w=2070&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D" alt="Profile Picture" class="rounded-circle " width="100">
+            </div>
+            <h2 class="mt-3"><%= user.name %></h2>
+            <h5c lass="">@<%= user.username %></h3>
+
+            <!-- Image Upload Form -->
+            <form action="/upload" method="POST" enctype="multipart/form-data" class="mt-3">
+                <input type="file" name="file" accept="image/*" class="form-control mb-2" required>
+                <input type="text" name="description" class="form-control mb-2" placeholder="Enter some description" required>
+                <button type="submit" class="btn btn-primary w-100">Upload</button>
+            </form>
+
+            <a href="/logout" class="btn btn-danger mt-3">Logout</a>
+        </div>
+    </div>
+<!-- User's Posts Section -->
+<div class="container mt-5">
+  <h3 class="text-center mb-4"><%= user.name %>'s Posts</h3>
+  
+  <!-- Masonry Grid -->
+  <div class="row" style="column-count: 3; column-gap: 15px;">
+      <% if (user.posts.length > 0) { %>
+          <% user.posts.forEach(post => { %>
+              <div class="card mb-3" style="break-inside: avoid; border: none;">
+                  <img src="/images/uploads/<%= post.imageUrl %>" class="img-fluid rounded" alt="Post Image" style="width: 100%; height: auto;">
+                  <div class="card-body">
+                      <p class="card-text text-center"><%= post.description %></p>
+                  </div>
+              </div>
+          <% }); %>
+      <% } else { %>
+          <p class="text-muted text-center">No posts available.</p>
+      <% } %>
+  </div>
+</div>
+
+
+</body>
+</html>

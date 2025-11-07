@@ -1,0 +1,76 @@
+<style>
+/* Shared navbar styles (consistent height and look) */
+.navbar {
+    background-color: #ffffff !important;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+    padding: 0.6rem 0;
+    min-height: 56px;
+}
+.navbar-brand { font-weight: 700; color: #1a1a1a !important; font-size: 1.25rem; }
+.navbar .nav-link { color: #4a4a4a !important; font-weight: 500; padding: 0.45rem 0.9rem; margin: 0 0.18rem; border-radius: 6px; transition: all 0.25s ease; }
+.navbar .nav-link:hover { background-color: #f8f9fa; color: #007bff !important; }
+.navbar .nav-link.active { color: #007bff !important; background-color: #e7f1ff; }
+.navbar-toggler { border: none; padding: 0.4rem; }
+.navbar-toggler:focus { box-shadow: none; outline: none; }
+</style>
+
+<nav class="navbar navbar-expand-lg">
+  <div class="container">
+    <a class="navbar-brand" href="/home">
+      <i class="fas fa-camera-retro me-2"></i>Shyam Polycom
+    </a>
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+
+    <div class="collapse navbar-collapse" id="navbarNav">
+      <ul class="navbar-nav ms-auto">
+        <li class="nav-item">
+          <a href="/home" class="nav-link <%= current === 'home' ? 'active' : '' %>">
+            <i class="fas fa-home me-1"></i> Home
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="/inventory" class="nav-link <%= current === 'inventory' ? 'active' : '' %>">
+            <i class="fas fa-box me-1"></i> Inventory
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="/products" class="nav-link <%= current === 'products' ? 'active' : '' %>">
+            <i class="fas fa-th-list me-1"></i> Products
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="/sales" class="nav-link <%= current === 'sales' ? 'active' : '' %>">
+            <i class="fas fa-chart-line me-1"></i> Sales
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="/purchases" class="nav-link <%= current === 'purchases' ? 'active' : '' %>">
+            <i class="fas fa-shopping-cart me-1"></i> Purchases
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="/employees" class="nav-link <%= current === 'employees' ? 'active' : '' %>">
+            <i class="fas fa-users me-1"></i> Employees
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="/customers" class="nav-link <%= current === 'customers' ? 'active' : '' %>">
+            <i class="fas fa-user-friends me-1"></i> Customers
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="/vendors" class="nav-link <%= current === 'vendors' ? 'active' : '' %>">
+            <i class="fas fa-user-friends me-1"></i> Vendors
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="/logout" class="nav-link">
+            <i class="fas fa-sign-out-alt me-1"></i> Logout
+          </a>
+        </li>
+      </ul>
+    </div>
+  </div>
+</nav>
