@@ -1,28 +1,26 @@
 const mongoose = require('mongoose');
-const passportLocalMongoose = require('passport-local-mongoose');  // Import passport-local-mongoose
-// Database connection is handled in config/database.js
+const passportLocalMongoose = require('passport-local-mongoose'); // Import passport-local-mongoose
 
 // Define the schema for users
-const userschema = new mongoose.Schema({
-  username: String,
-  secret:String,
-  password:String,
+const userSchema = new mongoose.Schema({
+  username: { type: String, required: true, unique: true },
+  secret: String,
+  password: String,
   name: String,
-  posts:[
+  posts: [
     {
-      type:mongoose.Schema.Types.ObjectId,
-      ref:'posts'
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'posts'
     }
-
   ],
   dateCreated: {
-    type:Date,
-    default:Date.now()
+    type: Date,
+    default: Date.now
   }
 });
 
-// Add passport-local-mongoose to the schema
-userschema.plugin(passportLocalMongoose);  // Adds methods like authenticate(), register(), etc.
+// Add passport-local-mongoose plugin
+userSchema.plugin(passportLocalMongoose);
 
-module.exports = mongoose.models.User || mongoose.model('User', userSchema);
-
+// ✅ Prevent OverwriteModelError during redeploys or serverless reloads
+module.exports = mongoose.models.users || mongoose.model('users', userSchema);
