@@ -36,7 +36,7 @@ const sessionConfig = {
     maxAge: 1000 * 60 * 60 * 24 * 7, // 1 week
   },
   store: MongoStore.create({
-    mongoUrl: process.env.MONGO_URI || 'mongodb+srv://rprashant264_db_user:R57pLoNPxUVIHo3j@cluster0.bixhvvz.mongodb.net/?appName=Cluster0',
+    mongoUrl: process.env.MONGO_URI ||  'mongodb+srv://rprashant264_db_user:password@cluster0.bixhvvz.mongodb.net/mydatabase?retryWrites=true&w=majority',,
     ttl: 24 * 60 * 60,
     autoRemove: 'interval',
     autoRemoveInterval: 24 * 60,
