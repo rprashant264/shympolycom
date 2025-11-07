@@ -20,7 +20,7 @@ const User = require('./models/User'); // ✅ Make sure you have this file
 const app = express();
 
 // -------------------- DATABASE CONNECTION --------------------
-mongoose.connect(process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/myapp')
+mongoose.connect(process.env.MONGO_URI || 'mongodb+srv://rprashant264_db_user:R57pLoNPxUVIHo3j@cluster0.bixhvvz.mongodb.net/?appName=Cluster0')
   .then(() => console.log('✅ MongoDB connected successfully'))
   .catch(err => console.error('❌ MongoDB connection error:', err));
 
@@ -36,7 +36,7 @@ const sessionConfig = {
     maxAge: 1000 * 60 * 60 * 24 * 7, // 1 week
   },
   store: MongoStore.create({
-    mongoUrl: process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/myapp',
+    mongoUrl: process.env.MONGO_URI || 'mongodb+srv://rprashant264_db_user:R57pLoNPxUVIHo3j@cluster0.bixhvvz.mongodb.net/?appName=Cluster0',
     ttl: 24 * 60 * 60,
     autoRemove: 'interval',
     autoRemoveInterval: 24 * 60,
