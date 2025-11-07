@@ -20,7 +20,7 @@ const User = require('./models/User'); // ✅ Make sure you have this file
 const app = express();
 
 // -------------------- DATABASE CONNECTION --------------------
-mongoose.connect(process.env.MONGO_URI || 'mongodb+srv://rprashant264_db_user:R57pLoNPxUVIHo3j@cluster0.bixhvvz.mongodb.net/?appName=Cluster0')
+mongoose.connect(process.env.MONGO_URI ||  'mongodb+srv://rprashant264_db_user:password@cluster0.bixhvvz.mongodb.net/mydatabase?retryWrites=true&w=majority',)
   .then(() => console.log('✅ MongoDB connected successfully'))
   .catch(err => console.error('❌ MongoDB connection error:', err));
 
