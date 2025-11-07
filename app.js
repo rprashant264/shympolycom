@@ -4,7 +4,6 @@ var express = require('express');
 var path = require('path');
 var cookieParser = require('cookie-parser');
 var logger = require('morgan');
-const { connectDB } = require('./config/database');
 const MongoStore = require('connect-mongo');
 const mongoose = require('mongoose');
 
@@ -17,10 +16,8 @@ const passport = require('passport');
 const localStrategy = require('passport-local').Strategy;
 const flash = require("connect-flash");
 
-// Connect to MongoDB
-connectDB()
-    .then(() => console.log('MongoDB connected successfully'))
-    .catch(err => console.error('Failed to connect to MongoDB:', err));
+// NOTE: Database connection is established in the server startup (bin/www)
+// to ensure the app only starts listening after MongoDB is ready.
 
 // Session configuration
 const sessionConfig = {
