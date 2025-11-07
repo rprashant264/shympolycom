@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 
 async function connectDB() {
     try {
-        const uri = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/polycom';
+        const uri = mongodb+srv://rprashant264_db_user:R57pLoNPxUVIHo3j@cluster0.bixhvvz.mongodb.net/?appName=Cluster0;
         
         const options = {
             serverSelectionTimeoutMS: 5000,
