@@ -187,72 +187,57 @@ router.get('/logout', (req, res, next) => {
 });
 
 
-// Inventory page (compiled data)
 router.get('/inventory', isLoggedIn, async (req, res, next) => {
-   console.log('🔥 /inventory route hit');
   try {
-    console.log('🔹 Fetching inventory data...');
+    console.log('🔥 /inventory route hit');
 
-    // Step 1: Get all products
+    // Step 1: Fetch all products
     const products = await Product.find()
-      .select('hsnCode productName cost stock')
+      .select('hsnCode productName stock cost')
       .sort({ productName: 1 })
       .lean();
     console.log('📦 Products fetched:', products.length);
 
-    // Step 2: Aggregate sold units from Sales
+    // Step 2: Aggregate sold units grouped by hsnCode
     const salesAgg = await Sale.aggregate([
-      {
-        $group: {
-          _id: '$productRef',
-          totalSold: { $sum: '$units' }
-        }
-      }
+      { $match: { hsnCode: { $exists: true, $ne: null } } },
+      { $group: { _id: '$hsnCode', totalSold: { $sum: '$units' } } }
     ]);
-    console.log('💰 Sales aggregation result:', JSON.stringify(salesAgg, null, 2));
+    console.log('💰 Sales aggregation by hsnCode:', salesAgg);
 
-    // Step 3: Aggregate produced units from Purchases
+    // Step 3: Aggregate produced units grouped by hsnCode
     const purchaseAgg = await Purchase.aggregate([
-      {
-        $group: {
-          _id: '$productRef',
-          totalProduced: { $sum: '$units' }
-        }
-      }
+      { $match: { hsnCode: { $exists: true, $ne: null } } },
+      { $group: { _id: '$hsnCode', totalProduced: { $sum: '$units' } } }
     ]);
-    console.log('🏭 Purchase aggregation result:', JSON.stringify(purchaseAgg, null, 2));
+    console.log('🏭 Purchases aggregation by hsnCode:', purchaseAgg);
 
-    // Step 4: Convert to Maps for O(1) lookup
-    const salesMap = new Map(salesAgg.map(s => [s._id?.toString(), s.totalSold || 0]));
-    const purchaseMap = new Map(purchaseAgg.map(p => [p._id?.toString(), p.totalProduced || 0]));
-    console.log('🗺️ salesMap keys:', [...salesMap.keys()]);
-    console.log('🗺️ purchaseMap keys:', [...purchaseMap.keys()]);
+    // Step 4: Convert to maps for fast lookup
+    const salesMap = new Map(salesAgg.map(s => [s._id, s.totalSold]));
+    const purchaseMap = new Map(purchaseAgg.map(p => [p._id, p.totalProduced]));
 
-    // Step 5: Combine data
+    // Step 5: Merge data
     const items = products.map(p => {
-      const productId = p._id.toString();
-      const producedUnits = purchaseMap.get(productId) || 0;
-      const soldUnits = salesMap.get(productId) || 0;
-
-      console.log(`➡️ Product: ${p.productName} (${productId}) | Produced: ${producedUnits} | Sold: ${soldUnits}`);
+      const produced = purchaseMap.get(p.hsnCode) || 0;
+      const sold = salesMap.get(p.hsnCode) || 0;
+      const stock = p.stock || 0;
+      const cost = p.cost || 0;
 
       return {
         hsnCode: p.hsnCode,
         productName: p.productName,
-        producedUnits,
-        soldUnits,
-        stock: p.stock || 0,
-        stockAmount: (p.stock || 0) * (p.cost || 0)
+        producedUnits: produced,
+        soldUnits: sold,
+        stock,
+        stockAmount: stock * cost
       };
     });
 
-    console.log('✅ Final compiled inventory items:', JSON.stringify(items, null, 2));
+    console.log('✅ Final compiled items (sample):', items.slice(0, 3));
 
-    // Step 6: Render the view
     res.render('inventory', { items });
-
   } catch (err) {
-    console.error('❌ Error in /inventory route:', err);
+    console.error('❌ Error in /inventory:', err);
     next(err);
   }
 });
