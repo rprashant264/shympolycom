@@ -186,9 +186,6 @@ router.get('/logout', (req, res, next) => {
   });
 });
 
-import fs from 'fs';
-import path from 'path';
-
 router.get('/inventory', isLoggedIn, async (req, res, next) => {
   try {
     console.log('🔥 /inventory route hit');
@@ -200,61 +197,52 @@ router.get('/inventory', isLoggedIn, async (req, res, next) => {
       .lean();
     console.log('📦 Products fetched:', products.length);
 
-    // Step 2: Aggregate total sold units grouped by productRef
+    // Step 2: Aggregate sold units grouped by productRef
     const salesAgg = await Sale.aggregate([
       { $match: { productRef: { $exists: true, $ne: null } } },
       { $group: { _id: '$productRef', totalSold: { $sum: '$units' } } }
     ]);
-    console.log('💰 Sales aggregation results count:', salesAgg.length);
-    if (salesAgg.length > 0) console.log('💰 Example Sale:', salesAgg[0]);
+    console.log('💰 Sales aggregation count:', salesAgg.length);
+    if (salesAgg.length > 0) console.log('💰 Sample Sale:', JSON.stringify(salesAgg.slice(0, 3), null, 2));
 
-    // Step 3: Aggregate total produced units grouped by productRef
+    // Step 3: Aggregate produced units grouped by productRef
     const purchaseAgg = await Purchase.aggregate([
       { $match: { productRef: { $exists: true, $ne: null } } },
       { $group: { _id: '$productRef', totalProduced: { $sum: '$units' } } }
     ]);
-    console.log('🏭 Purchases aggregation results count:', purchaseAgg.length);
-    if (purchaseAgg.length > 0) console.log('🏭 Example Purchase:', purchaseAgg[0]);
+    console.log('🏭 Purchases aggregation count:', purchaseAgg.length);
+    if (purchaseAgg.length > 0) console.log('🏭 Sample Purchase:', JSON.stringify(purchaseAgg.slice(0, 3), null, 2));
 
     // Step 4: Convert to maps for quick lookup
     const salesMap = new Map(salesAgg.map(s => [String(s._id), s.totalSold]));
     const purchaseMap = new Map(purchaseAgg.map(p => [String(p._id), p.totalProduced]));
 
-    // Step 5: Merge data for each product
+    // Step 5: Merge data
     const items = products.map(p => {
       const productId = String(p._id);
       const produced = purchaseMap.get(productId) || 0;
       const sold = salesMap.get(productId) || 0;
-      const stock = p.stock || 0;
-      const cost = p.cost || 0;
-
       return {
         hsnCode: p.hsnCode,
         productName: p.productName,
         producedUnits: produced,
         soldUnits: sold,
-        stock,
-        stockAmount: stock * cost
+        stock: p.stock || 0,
+        stockAmount: (p.stock || 0) * (p.cost || 0)
       };
     });
 
-    // Step 6: Save debug data to a file
-    const debugPath = path.join(process.cwd(), 'inventory_debug.json');
-    fs.writeFileSync(
-      debugPath,
-      JSON.stringify({ products, salesAgg, purchaseAgg, itemsSample: items.slice(0, 5) }, null, 2)
-    );
-    console.log(`🧾 Debug data exported to: ${debugPath}`);
+    // Step 6: Print sample merged data
+    console.log('✅ Merged sample:', JSON.stringify(items.slice(0, 5), null, 2));
 
-    console.log('✅ Sample merged data:', items.slice(0, 3));
-
-    // Step 7: Render the view
+    // Render EJS
     res.render('inventory', { items });
   } catch (err) {
     console.error('❌ Error in /inventory:', err);
     next(err);
   }
 });
+
 
 
 
