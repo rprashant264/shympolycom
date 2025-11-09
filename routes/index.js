@@ -12,6 +12,7 @@ const Customer = require('../models/customer');
 const Employee = require('../models/employee');
 const Sale = require('../models/sale');
 const Purchase = require('../models/purchase');
+const Vendor = require('../models/vendor');
 
 
 // Home Page (Public)
