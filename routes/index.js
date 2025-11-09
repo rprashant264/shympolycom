@@ -10,10 +10,6 @@ const upload = require('./multer');
 const Product = require('../models/product');
 const Customer = require('../models/customer');
 const Employee = require('../models/employee');
-const Purchase = require('../models/purchase');
-const Sale = require('../models/sale');
-const Item = require('../models/item');
-const Vendor = require('../models/vendor');
 
 
 // Home Page (Public)
@@ -191,6 +187,7 @@ router.get('/logout', (req, res, next) => {
 
 // Inventory page (compiled data)
 router.get('/inventory', isLoggedIn, async (req, res, next) => {
+   console.log('🔥 /inventory route hit');
   try {
     console.log('🔹 Fetching inventory data...');
 
