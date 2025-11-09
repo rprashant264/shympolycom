@@ -186,62 +186,50 @@ router.get('/logout', (req, res, next) => {
   });
 });
 
+// Inventory page: compute compiled inventory from Product, Purchase and Sale collections
 router.get('/inventory', isLoggedIn, async (req, res, next) => {
   try {
-    console.log('🔥 /inventory route hit');
-
-    // Step 1: Fetch all products
-    const products = await Product.find()
-      .select('hsnCode productName stock cost')
-      .sort({ productName: 1 })
-      .lean();
-    console.log('📦 Products fetched:', products.length);
-
-    // Step 2: Aggregate sold units grouped by productRef
+    // aggregate total purchased units per product
+    const purchasesAgg = await Purchase.aggregate([
+      { $group: { _id: '$productRef', totalPurchased: { $sum: '$units' } } }
+    ]);
+    // aggregate total sold units per product
     const salesAgg = await Sale.aggregate([
-      { $match: { productRef: { $exists: true, $ne: null } } },
       { $group: { _id: '$productRef', totalSold: { $sum: '$units' } } }
     ]);
-    console.log('💰 Sales aggregation count:', salesAgg.length);
-    if (salesAgg.length > 0) console.log('💰 Sample Sale:', JSON.stringify(salesAgg.slice(0, 3), null, 2));
 
-    // Step 3: Aggregate produced units grouped by productRef
-    const purchaseAgg = await Purchase.aggregate([
-      { $match: { productRef: { $exists: true, $ne: null } } },
-      { $group: { _id: '$productRef', totalProduced: { $sum: '$units' } } }
-    ]);
-    console.log('🏭 Purchases aggregation count:', purchaseAgg.length);
-    if (purchaseAgg.length > 0) console.log('🏭 Sample Purchase:', JSON.stringify(purchaseAgg.slice(0, 3), null, 2));
+    const purchaseMap = {};
+    purchasesAgg.forEach(p => { if (p._id) purchaseMap[String(p._id)] = p.totalPurchased; });
+    const saleMap = {};
+    salesAgg.forEach(s => { if (s._id) saleMap[String(s._id)] = s.totalSold; });
 
-    // Step 4: Convert to maps for quick lookup
-    const salesMap = new Map(salesAgg.map(s => [String(s._id), s.totalSold]));
-    const purchaseMap = new Map(purchaseAgg.map(p => [String(p._id), p.totalProduced]));
+    const products = await Product.find().sort({ productName: 1 }).lean();
 
-    // Step 5: Merge data
     const items = products.map(p => {
-      const productId = String(p._id);
-      const produced = purchaseMap.get(productId) || 0;
-      const sold = salesMap.get(productId) || 0;
+      const id = String(p._id);
+      const purchaseUnits = purchaseMap[id] || 0;
+      const saleUnits = saleMap[id] || 0;
+      const stock = (typeof p.stock === 'number') ? p.stock : Math.max(purchaseUnits - saleUnits, 0);
+      const cost = Number(p.cost || 0);
+      const stockAmount = Number((stock * cost) || 0);
       return {
+        _id: p._id,
         hsnCode: p.hsnCode,
         productName: p.productName,
-        producedUnits: produced,
-        soldUnits: sold,
-        stock: p.stock || 0,
-        stockAmount: (p.stock || 0) * (p.cost || 0)
+        cost,
+        purchaseUnits,
+        saleUnits,
+        stock,
+        stockAmount
       };
     });
 
-    // Step 6: Print sample merged data
-    console.log('✅ Merged sample:', JSON.stringify(items.slice(0, 5), null, 2));
-
-    // Render EJS
     res.render('inventory', { items });
   } catch (err) {
-    console.error('❌ Error in /inventory:', err);
     next(err);
   }
 });
+
 
 
 
