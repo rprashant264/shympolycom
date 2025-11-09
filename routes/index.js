@@ -10,6 +10,8 @@ const upload = require('./multer');
 const Product = require('../models/product');
 const Customer = require('../models/customer');
 const Employee = require('../models/employee');
+const Sale = require('../models/sale');
+const Purchase = require('../models/purchase');
 
 
 // Home Page (Public)
