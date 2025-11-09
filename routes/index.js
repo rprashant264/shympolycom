@@ -186,6 +186,8 @@ router.get('/logout', (req, res, next) => {
   });
 });
 
+import fs from 'fs';
+import path from 'path';
 
 router.get('/inventory', isLoggedIn, async (req, res, next) => {
   try {
@@ -203,14 +205,16 @@ router.get('/inventory', isLoggedIn, async (req, res, next) => {
       { $match: { productRef: { $exists: true, $ne: null } } },
       { $group: { _id: '$productRef', totalSold: { $sum: '$units' } } }
     ]);
-    console.log('💰 Sales aggregation by productRef:', salesAgg.length);
+    console.log('💰 Sales aggregation results count:', salesAgg.length);
+    if (salesAgg.length > 0) console.log('💰 Example Sale:', salesAgg[0]);
 
     // Step 3: Aggregate total produced units grouped by productRef
     const purchaseAgg = await Purchase.aggregate([
       { $match: { productRef: { $exists: true, $ne: null } } },
       { $group: { _id: '$productRef', totalProduced: { $sum: '$units' } } }
     ]);
-    console.log('🏭 Purchases aggregation by productRef:', purchaseAgg.length);
+    console.log('🏭 Purchases aggregation results count:', purchaseAgg.length);
+    if (purchaseAgg.length > 0) console.log('🏭 Example Purchase:', purchaseAgg[0]);
 
     // Step 4: Convert to maps for quick lookup
     const salesMap = new Map(salesAgg.map(s => [String(s._id), s.totalSold]));
@@ -234,9 +238,17 @@ router.get('/inventory', isLoggedIn, async (req, res, next) => {
       };
     });
 
-    console.log('✅ Final compiled items (sample):', items.slice(0, 3));
+    // Step 6: Save debug data to a file
+    const debugPath = path.join(process.cwd(), 'inventory_debug.json');
+    fs.writeFileSync(
+      debugPath,
+      JSON.stringify({ products, salesAgg, purchaseAgg, itemsSample: items.slice(0, 5) }, null, 2)
+    );
+    console.log(`🧾 Debug data exported to: ${debugPath}`);
 
-    // Step 6: Render the view
+    console.log('✅ Sample merged data:', items.slice(0, 3));
+
+    // Step 7: Render the view
     res.render('inventory', { items });
   } catch (err) {
     console.error('❌ Error in /inventory:', err);
