@@ -192,13 +192,16 @@ router.get('/logout', (req, res, next) => {
 // Inventory page (compiled data)
 router.get('/inventory', isLoggedIn, async (req, res, next) => {
   try {
-    // Step 1: Get all products with cost (for stockAmount calculation)
+    console.log('🔹 Fetching inventory data...');
+
+    // Step 1: Get all products
     const products = await Product.find()
       .select('hsnCode productName cost stock')
       .sort({ productName: 1 })
       .lean();
+    console.log('📦 Products fetched:', products.length);
 
-    // Step 2: Aggregate total sold units from Sales
+    // Step 2: Aggregate sold units from Sales
     const salesAgg = await Sale.aggregate([
       {
         $group: {
@@ -207,8 +210,9 @@ router.get('/inventory', isLoggedIn, async (req, res, next) => {
         }
       }
     ]);
+    console.log('💰 Sales aggregation result:', JSON.stringify(salesAgg, null, 2));
 
-    // Step 3: Aggregate total produced units from Purchases
+    // Step 3: Aggregate produced units from Purchases
     const purchaseAgg = await Purchase.aggregate([
       {
         $group: {
@@ -217,32 +221,39 @@ router.get('/inventory', isLoggedIn, async (req, res, next) => {
         }
       }
     ]);
+    console.log('🏭 Purchase aggregation result:', JSON.stringify(purchaseAgg, null, 2));
 
-    // Step 4: Convert aggregation results into Maps for O(1) lookup
+    // Step 4: Convert to Maps for O(1) lookup
     const salesMap = new Map(salesAgg.map(s => [s._id?.toString(), s.totalSold || 0]));
     const purchaseMap = new Map(purchaseAgg.map(p => [p._id?.toString(), p.totalProduced || 0]));
+    console.log('🗺️ salesMap keys:', [...salesMap.keys()]);
+    console.log('🗺️ purchaseMap keys:', [...purchaseMap.keys()]);
 
-    // Step 5: Merge everything into a single array
+    // Step 5: Combine data
     const items = products.map(p => {
-      const producedUnits = purchaseMap.get(p._id.toString()) || 0;
-      const soldUnits = salesMap.get(p._id.toString()) || 0;
-      const stockUnits = p.stock || 0;
+      const productId = p._id.toString();
+      const producedUnits = purchaseMap.get(productId) || 0;
+      const soldUnits = salesMap.get(productId) || 0;
+
+      console.log(`➡️ Product: ${p.productName} (${productId}) | Produced: ${producedUnits} | Sold: ${soldUnits}`);
 
       return {
         hsnCode: p.hsnCode,
         productName: p.productName,
         producedUnits,
         soldUnits,
-        stock: stockUnits,
-        stockAmount: (stockUnits * (p.cost || 0)).toFixed(2),
-        netAvailable: producedUnits - soldUnits // Optional extra field
+        stock: p.stock || 0,
+        stockAmount: (p.stock || 0) * (p.cost || 0)
       };
     });
 
-    // Step 6: Render the compiled inventory page
+    console.log('✅ Final compiled inventory items:', JSON.stringify(items, null, 2));
+
+    // Step 6: Render the view
     res.render('inventory', { items });
+
   } catch (err) {
-    console.error('Error in /inventory route:', err);
+    console.error('❌ Error in /inventory route:', err);
     next(err);
   }
 });
