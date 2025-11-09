@@ -218,7 +218,7 @@ router.get('/inventory', isLoggedIn, async (req, res, next) => {
       productName: p.productName,
       producedUnits: purchaseMap.get(p._id.toString()) || 0,
       soldUnits: salesMap.get(p._id.toString()) || 0,
-      stock: p.stock || 0
+      stock: p.stock || 0,
       stockAmount: (p.stock || 0) * (p.cost || 0)
     }));
 
