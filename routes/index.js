@@ -198,28 +198,29 @@ router.get('/inventory', isLoggedIn, async (req, res, next) => {
       .lean();
     console.log('📦 Products fetched:', products.length);
 
-    // Step 2: Aggregate sold units grouped by hsnCode
+    // Step 2: Aggregate total sold units grouped by productRef
     const salesAgg = await Sale.aggregate([
-      { $match: { hsnCode: { $exists: true, $ne: null } } },
-      { $group: { _id: '$hsnCode', totalSold: { $sum: '$units' } } }
+      { $match: { productRef: { $exists: true, $ne: null } } },
+      { $group: { _id: '$productRef', totalSold: { $sum: '$units' } } }
     ]);
-    console.log('💰 Sales aggregation by hsnCode:', salesAgg);
+    console.log('💰 Sales aggregation by productRef:', salesAgg.length);
 
-    // Step 3: Aggregate produced units grouped by hsnCode
+    // Step 3: Aggregate total produced units grouped by productRef
     const purchaseAgg = await Purchase.aggregate([
-      { $match: { hsnCode: { $exists: true, $ne: null } } },
-      { $group: { _id: '$hsnCode', totalProduced: { $sum: '$units' } } }
+      { $match: { productRef: { $exists: true, $ne: null } } },
+      { $group: { _id: '$productRef', totalProduced: { $sum: '$units' } } }
     ]);
-    console.log('🏭 Purchases aggregation by hsnCode:', purchaseAgg);
+    console.log('🏭 Purchases aggregation by productRef:', purchaseAgg.length);
 
-    // Step 4: Convert to maps for fast lookup
-    const salesMap = new Map(salesAgg.map(s => [s._id, s.totalSold]));
-    const purchaseMap = new Map(purchaseAgg.map(p => [p._id, p.totalProduced]));
+    // Step 4: Convert to maps for quick lookup
+    const salesMap = new Map(salesAgg.map(s => [String(s._id), s.totalSold]));
+    const purchaseMap = new Map(purchaseAgg.map(p => [String(p._id), p.totalProduced]));
 
-    // Step 5: Merge data
+    // Step 5: Merge data for each product
     const items = products.map(p => {
-      const produced = purchaseMap.get(p.hsnCode) || 0;
-      const sold = salesMap.get(p.hsnCode) || 0;
+      const productId = String(p._id);
+      const produced = purchaseMap.get(productId) || 0;
+      const sold = salesMap.get(productId) || 0;
       const stock = p.stock || 0;
       const cost = p.cost || 0;
 
@@ -235,12 +236,14 @@ router.get('/inventory', isLoggedIn, async (req, res, next) => {
 
     console.log('✅ Final compiled items (sample):', items.slice(0, 3));
 
+    // Step 6: Render the view
     res.render('inventory', { items });
   } catch (err) {
     console.error('❌ Error in /inventory:', err);
     next(err);
   }
 });
+
 
 
 // Create new inventory item
