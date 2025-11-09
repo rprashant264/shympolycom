@@ -188,18 +188,46 @@ router.get('/logout', (req, res, next) => {
   });
 });
 
-// Inventory page
+
+// Inventory page (compiled data)
 router.get('/inventory', isLoggedIn, async (req, res, next) => {
   try {
-    const items = await Item.find({})
-      .select('hsnCode productName cost purchaseUnits saleUnits stock stockAmount')
+    // Step 1: Get all products
+    const products = await Product.find()
+      .select('hsnCode productName stock')
       .sort({ productName: 1 })
       .lean();
+
+    // Step 2: Aggregate sold units (from Sales collection)
+    const salesAgg = await Sale.aggregate([
+      { $group: { _id: '$productRef', totalSold: { $sum: '$units' } } }
+    ]);
+
+    // Step 3: Aggregate produced units (from Purchases collection)
+    const purchaseAgg = await Purchase.aggregate([
+      { $group: { _id: '$productRef', totalProduced: { $sum: '$units' } } }
+    ]);
+
+    // Step 4: Convert aggregations to maps for fast lookup
+    const salesMap = new Map(salesAgg.map(s => [s._id.toString(), s.totalSold]));
+    const purchaseMap = new Map(purchaseAgg.map(p => [p._id.toString(), p.totalProduced]));
+
+    // Step 5: Combine everything
+    const items = products.map(p => ({
+      hsnCode: p.hsnCode,
+      productName: p.productName,
+      producedUnits: purchaseMap.get(p._id.toString()) || 0,
+      soldUnits: salesMap.get(p._id.toString()) || 0,
+      stock: p.stock || 0
+    }));
+
+    // Step 6: Render the EJS view with compiled data
     res.render('inventory', { items });
   } catch (err) {
     next(err);
   }
 });
+
 
 // Create new inventory item
 router.post('/inventory', isLoggedIn, async (req, res, next) => {
