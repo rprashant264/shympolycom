@@ -66,8 +66,8 @@
           <div class="mb-3"><label class="form-label">Address</label><input name="address" class="form-control"></div>
           <div class="mb-3">
             <label class="form-label">Products (choose which products this vendor supplies)</label>
-            <select id="vendorProductsSelect" name="products" class="form-select" multiple></select>
-            <small class="text-muted">Hold Ctrl/Cmd to select multiple</small>
+            <div id="vendorProductsCheckboxes"></div>
+            <small class="text-muted">Select products by checking the boxes</small>
           </div>
         </div>
         <div class="modal-footer">
@@ -83,7 +83,7 @@
     const vendorModalEl = document.getElementById('vendorModal');
     const vendorForm = document.getElementById('vendorForm');
     const vendorError = document.getElementById('vendorError');
-    const vendorProductsSelect = document.getElementById('vendorProductsSelect');
+  const vendorProductsCheckboxes = document.getElementById('vendorProductsCheckboxes');
     const vendorsTbody = document.querySelector('tbody');
     let editingVendorId = null;
 
@@ -99,16 +99,21 @@
         const res = await fetch('/api/products');
         if (!res.ok) return;
         const products = await res.json();
-        vendorProductsSelect.innerHTML = products.map(p => `<option value="${p._id}">${p.productName} (${p.hsnCode})</option>`).join('');
+        vendorProductsCheckboxes.innerHTML = products.map(p => `
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" value="${p._id}" id="product_${p._id}" name="products">
+            <label class="form-check-label" for="product_${p._id}">${p.productName} (${p.hsnCode})</label>
+          </div>
+        `).join('');
       } catch (e) { console.error(e); }
     });
 
     vendorForm.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const data = Object.fromEntries(new FormData(vendorForm));
-      // handle multiple select
-      const selected = Array.from(vendorProductsSelect.selectedOptions).map(o => o.value);
-      data.products = selected;
+  const data = Object.fromEntries(new FormData(vendorForm));
+  // handle checkboxes
+  const selected = Array.from(vendorProductsCheckboxes.querySelectorAll('input[type="checkbox"]:checked')).map(o => o.value);
+  data.products = selected;
       try {
         if (editingVendorId) {
           const res = await fetch(`/vendors/${editingVendorId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
@@ -151,13 +156,20 @@
           vendorForm.querySelector('input[name="email"]').value = v.email || '';
           vendorForm.querySelector('input[name="phone"]').value = v.phone || '';
           vendorForm.querySelector('input[name="address"]').value = v.address || '';
-          // populate product select then mark selected
+          // populate product checkboxes then mark selected
           const prodRes = await fetch('/api/products');
           if (prodRes.ok) {
             const products = await prodRes.json();
-            vendorProductsSelect.innerHTML = products.map(p => `<option value="${p._id}">${p.productName} (${p.hsnCode})</option>`).join('');
+            vendorProductsCheckboxes.innerHTML = products.map(p => `
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" value="${p._id}" id="product_${p._id}" name="products">
+                <label class="form-check-label" for="product_${p._id}">${p.productName} (${p.hsnCode})</label>
+              </div>
+            `).join('');
             // mark selected
-            Array.from(vendorProductsSelect.options).forEach(opt => { opt.selected = (v.products||[]).includes(opt.value); });
+            Array.from(vendorProductsCheckboxes.querySelectorAll('input[type="checkbox"]')).forEach(opt => {
+              opt.checked = (v.products||[]).includes(opt.value);
+            });
           }
           editingVendorId = id; document.querySelector('.modal-title').textContent = 'Edit Vendor'; const modal = new bootstrap.Modal(vendorModalEl); modal.show();
         } catch (err) { console.error(err); alert('Failed to prepare edit'); }
