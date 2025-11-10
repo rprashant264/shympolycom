@@ -1228,6 +1228,176 @@ router.get('/sales', isLoggedIn, async (req, res, next) => {
   }
 });
 
+
+
+// Auth middleware
+  // Salary page
+  router.get('/salary', isLoggedIn, async (req, res, next) => {
+    try {
+      const vendors = await Vendor.find().sort({ name: 1 }).lean();
+      res.render('salary', { vendors });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // API: Calculate vendor payment for date range
+  router.post('/api/salary/calculate', isLoggedIn, async (req, res, next) => {
+    try {
+      const { vendorId, startDate, endDate } = req.body;
+
+      // Validate inputs
+      if (!vendorId || !startDate || !endDate) {
+        return res.status(400).json({ error: 'Missing vendorId, startDate, or endDate' });
+      }
+
+      // Validate vendor exists
+      const vendor = await Vendor.findById(vendorId).lean();
+      if (!vendor) {
+        return res.status(404).json({ error: 'Vendor not found' });
+      }
+
+      // Parse dates
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+
+      if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+        return res.status(400).json({ error: 'Invalid date format' });
+      }
+
+      // Set end date to end of day
+      end.setHours(23, 59, 59, 999);
+
+      // Fetch purchases for this vendor within date range
+      const purchases = await Purchase.find({
+        vendorRef: vendorId,
+        date: { $gte: start, $lte: end }
+      }).populate('productRef').lean();
+
+      // Calculate total amount
+      const totalAmount = purchases.reduce((sum, p) => sum + (p.amount || 0), 0);
+      const totalUnits = purchases.reduce((sum, p) => sum + (p.units || 0), 0);
+
+      res.json({
+        vendorId,
+        vendorName: vendor.name,
+        startDate: start.toISOString().slice(0, 10),
+        endDate: end.toISOString().slice(0, 10),
+        purchases,
+        totalUnits,
+        totalAmount,
+        purchaseCount: purchases.length
+      });
+    } catch (err) {
+      console.error('Error calculating salary:', err);
+      res.status(500).json({ error: err.message || 'Failed to calculate payment' });
+    }
+  });
+
+  // API: Generate professional PDF salary slip for vendor for the date range
+  router.post('/api/salary/pdf', isLoggedIn, async (req, res, next) => {
+    try {
+      const { vendorId, startDate, endDate } = req.body;
+      if (!vendorId || !startDate || !endDate) return res.status(400).json({ error: 'Missing vendorId, startDate or endDate' });
+
+      const vendor = await Vendor.findById(vendorId).lean();
+      if (!vendor) return res.status(404).json({ error: 'Vendor not found' });
+
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      end.setHours(23,59,59,999);
+
+      const purchases = await Purchase.find({ vendorRef: vendorId, date: { $gte: start, $lte: end } }).populate('productRef').lean();
+
+      // Totals
+      const totalAmount = purchases.reduce((s, p) => s + (p.amount || 0), 0);
+      const totalUnits = purchases.reduce((s, p) => s + (p.units || 0), 0);
+
+      // Create PDF document and stream to response
+      res.setHeader('Content-Type', 'application/pdf');
+      const filenameSafe = (vendor.name || 'vendor').replace(/[^a-z0-9\-\_]/gi, '_');
+      res.setHeader('Content-Disposition', `attachment; filename="vendor-payment-${filenameSafe}-${start.toISOString().slice(0,10)}-to-${end.toISOString().slice(0,10)}.pdf"`);
+
+      const doc = new PDFDocument({ size: 'A4', margin: 36 });
+      doc.pipe(res);
+
+      // Header
+      doc.fontSize(16).font('Helvetica-Bold').text('Shyam Polycom', { align: 'center' });
+      doc.moveDown(0.2);
+      doc.fontSize(12).font('Helvetica').text('Vendor Payment Slip', { align: 'center' });
+      doc.moveDown(0.5);
+      doc.fontSize(10).fillColor('#444').text(`Vendor: ${vendor.name}    Period: ${start.toISOString().slice(0,10)} to ${end.toISOString().slice(0,10)}`, { align: 'center' });
+      doc.moveDown(1);
+
+      // Summary boxes
+      const summaryTop = doc.y;
+      const boxWidth = (doc.page.width - doc.page.margins.left - doc.page.margins.right) / 3 - 6;
+      const startX = doc.x;
+
+      doc.rect(startX, summaryTop, boxWidth, 48).stroke();
+      doc.fontSize(10).font('Helvetica-Bold').text('Total Amount', startX + 6, summaryTop + 6);
+      doc.fontSize(12).font('Helvetica').text(`₹ ${totalAmount.toFixed(2)}`, startX + 6, summaryTop + 24);
+
+      doc.rect(startX + boxWidth + 6, summaryTop, boxWidth, 48).stroke();
+      doc.fontSize(10).font('Helvetica-Bold').text('Total Units', startX + boxWidth + 12, summaryTop + 6);
+      doc.fontSize(12).font('Helvetica').text(`${totalUnits}`, startX + boxWidth + 12, summaryTop + 24);
+
+      doc.rect(startX + (boxWidth + 6) * 2, summaryTop, boxWidth, 48).stroke();
+      doc.fontSize(10).font('Helvetica-Bold').text('Purchase Count', startX + (boxWidth + 6) * 2 + 6, summaryTop + 6);
+      doc.fontSize(12).font('Helvetica').text(`${purchases.length}`, startX + (boxWidth + 6) * 2 + 6, summaryTop + 24);
+
+      doc.moveDown(4);
+
+      // Table header
+      const tableTop = doc.y;
+      doc.fontSize(9).font('Helvetica-Bold');
+      doc.text('Date', 36, tableTop, { width: 70 });
+      doc.text('HSN', 110, tableTop, { width: 70 });
+      doc.text('Product', 180, tableTop, { width: 160 });
+      doc.text('Units', 350, tableTop, { width: 60, align: 'right' });
+      doc.text('Cost', 420, tableTop, { width: 70, align: 'right' });
+      doc.text('Amount', 495, tableTop, { width: 70, align: 'right' });
+      doc.moveTo(36, doc.y + 14).lineTo(doc.page.width - 36, doc.y + 14).stroke();
+      doc.moveDown(1.2);
+
+      // Table rows
+      doc.font('Helvetica').fontSize(9);
+      purchases.forEach(p => {
+        const y = doc.y;
+        const date = p.date ? new Date(p.date).toISOString().slice(0,10) : '';
+        doc.text(date, 36, y, { width: 70 });
+        doc.text(p.hsnCode || '', 110, y, { width: 70 });
+        const productName = p.productName || (p.productRef && p.productRef.productName) || '';
+        doc.text(productName, 180, y, { width: 160 });
+        doc.text(String(p.units || 0), 350, y, { width: 60, align: 'right' });
+        doc.text((p.cost != null ? Number(p.cost) : 0).toFixed(2), 420, y, { width: 70, align: 'right' });
+        doc.text((p.amount != null ? Number(p.amount) : 0).toFixed(2), 495, y, { width: 70, align: 'right' });
+        doc.moveDown(1);
+        // Add page break handling
+        if (doc.y > doc.page.height - 72) doc.addPage();
+      });
+
+      // Totals
+      doc.moveDown(1);
+      doc.fontSize(10).font('Helvetica-Bold').text('Totals', 36, doc.y);
+      doc.fontSize(10).font('Helvetica').text(`Total Units: ${totalUnits}`, 36, doc.y + 16);
+      doc.fontSize(12).font('Helvetica-Bold').text(`Total Amount: ₹ ${totalAmount.toFixed(2)}`, { align: 'right' });
+
+      // Signature area
+      doc.moveDown(6);
+      const sigY = doc.y;
+      doc.text('Prepared By', 36, sigY);
+      doc.text('__________________', 36, sigY + 36);
+      doc.text('Authorized Signatory', doc.page.width - 220, sigY);
+      doc.text('__________________', doc.page.width - 220, sigY + 36);
+
+      doc.end();
+    } catch (err) {
+      console.error('Error generating PDF:', err);
+      res.status(500).json({ error: err.message || 'Failed to generate PDF' });
+    }
+  });
+
 // Auth middleware
 function isLoggedIn(req, res, next) {
   console.log('=== isLoggedIn Middleware ===');
