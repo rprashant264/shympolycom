@@ -490,47 +490,60 @@ router.post('/purchases', isLoggedIn, async (req, res, next) => {
 });
 
 // Update purchase
-router.put('/purchases/:id', isLoggedIn, async (req, res, next) => {
+router.put('/purchases/:id', isLoggedIn, async (req, res) => {
   try {
+    // 1️⃣ Fetch existing purchase
     const purchase = await Purchase.findById(req.params.id);
     if (!purchase) return res.status(404).json({ error: 'Purchase not found' });
 
     const oldUnits = purchase.units || 0;
-    // determine new values
-    const newUnits = Number(req.body.units != null ? req.body.units : oldUnits);
-    const newCost = Number(req.body.cost != null ? req.body.cost : purchase.cost);
-    const amount = newUnits * newCost;
-
-    // determine if product changed
-    let newProductId = null;
-    if (req.body.productRef || req.body.productId) newProductId = req.body.productRef || req.body.productId;
-    else if (req.body.hsnCode) {
-      const newP = await Product.findOne({ hsnCode: req.body.hsnCode }).lean();
-      if (newP) newProductId = String(newP._id);
-    }
     const oldProductId = purchase.productRef ? String(purchase.productRef) : null;
 
+    // 2️⃣ Determine new values
+    const newUnits = Number(req.body.units ?? oldUnits);
+    const newCost = Number(req.body.cost ?? purchase.cost);
+    const amount = newUnits * newCost;
+
+    // 3️⃣ Determine new product (from productId, productRef, or hsnCode)
+    let newProductId = req.body.productRef || req.body.productId || null;
+    if (!newProductId && req.body.hsnCode) {
+      const product = await Product.findOne({ hsnCode: req.body.hsnCode }).lean();
+      if (product) newProductId = String(product._id);
+    }
+
+    // 4️⃣ STOCK ADJUSTMENT LOGIC
     if (newProductId && oldProductId && newProductId !== oldProductId) {
-      // product was changed: revert old product stock (remove oldUnits) and add to new product (add newUnits)
+      // Product changed → revert old stock, add to new
       try {
         await Product.findByIdAndUpdate(oldProductId, { $inc: { stock: -oldUnits } });
-      } catch (e) { console.error('Failed to decrement old product stock during purchase edit', e); }
+      } catch (e) { console.error('Failed to decrement old product stock', e); }
+
       try {
         await Product.findByIdAndUpdate(newProductId, { $inc: { stock: newUnits } });
-      } catch (e) { console.error('Failed to increment new product stock during purchase edit', e); }
+      } catch (e) { console.error('Failed to increment new product stock', e); }
+
       purchase.productRef = newProductId;
-      // update hsn/productName based on new product
-      try { const np = await Product.findById(newProductId).lean(); if (np) { purchase.hsnCode = np.hsnCode; purchase.productName = np.productName; } } catch (e) { }
-    } else {
-      // same product: adjust by delta
+
+      // Update product details (hsn, name)
+      try {
+        const np = await Product.findById(newProductId).lean();
+        if (np) {
+          purchase.hsnCode = np.hsnCode;
+          purchase.productName = np.productName;
+        }
+      } catch (e) { console.error('Failed to update product details after change', e); }
+
+    } else if (oldProductId) {
+      // Same product → adjust by delta
       const delta = newUnits - oldUnits;
-      if (purchase.productRef && delta !== 0) {
-        await Product.findByIdAndUpdate(purchase.productRef, { $inc: { stock: delta } });
+      if (delta !== 0) {
+        try {
+          await Product.findByIdAndUpdate(oldProductId, { $inc: { stock: delta } });
+        } catch (e) { console.error('Failed to update stock delta', e); }
       }
     }
 
-    // Vendor handling:
-    // If vendorId provided explicitly, use it. If not provided, but the product changed, try to reconcile vendorRef:
+    // 5️⃣ Vendor Handling
     if (req.body.vendorId) {
       try {
         const v = await Vendor.findById(req.body.vendorId).lean();
@@ -538,60 +551,68 @@ router.put('/purchases/:id', isLoggedIn, async (req, res, next) => {
           purchase.vendor = v.name;
           purchase.vendorRef = v._id;
         }
-      } catch (e) { console.error('Failed to resolve vendor by id:', e); }
+      } catch (e) {
+        console.error('Failed to resolve vendor by ID:', e);
+      }
     } else if (req.body.vendor !== undefined) {
-      // vendor name explicitly provided (text) - use name and clear ref
+      // vendor name explicitly provided (manual text input)
       purchase.vendor = req.body.vendor;
       purchase.vendorRef = null;
     } else if (newProductId && newProductId !== oldProductId) {
-      // product changed and no vendor info sent: try to keep existing vendor if it supplies new product
+      // Product changed but no vendor info sent → reconcile vendor if possible
       if (purchase.vendorRef) {
         try {
           const prevVendor = await Vendor.findById(purchase.vendorRef).lean();
           if (prevVendor && Array.isArray(prevVendor.products) && prevVendor.products.map(String).includes(String(newProductId))) {
-            // previous vendor still supplies new product: keep
+            // Keep same vendor if still supplies the product
           } else {
-            // previous vendor doesn't supply new product: try to auto-select if only one vendor supplies new product
             const suppliers = await Vendor.find({ products: newProductId }).lean();
-            if (suppliers && suppliers.length === 1) {
+            if (suppliers.length === 1) {
               purchase.vendor = suppliers[0].name;
               purchase.vendorRef = suppliers[0]._id;
             } else {
-              // ambiguous or none: clear vendor to force user selection
               purchase.vendor = '';
               purchase.vendorRef = null;
             }
           }
-        } catch (e) { console.error('Failed to reconcile vendor after product change', e); }
+        } catch (e) {
+          console.error('Failed to reconcile vendor after product change', e);
+        }
       } else {
-        // no previous vendorRef: try to auto-select if only one supplier exists for new product
         try {
           const suppliers = await Vendor.find({ products: newProductId }).lean();
-          if (suppliers && suppliers.length === 1) {
+          if (suppliers.length === 1) {
             purchase.vendor = suppliers[0].name;
             purchase.vendorRef = suppliers[0]._id;
           } else {
             purchase.vendor = '';
             purchase.vendorRef = null;
           }
-        } catch (e) { console.error('Failed to lookup suppliers after product change', e); }
+        } catch (e) {
+          console.error('Failed to lookup suppliers after product change', e);
+        }
       }
     }
 
-    // finalize fields
+    // 6️⃣ Finalize fields
     purchase.date = req.body.date ? new Date(req.body.date) : purchase.date;
     purchase.units = newUnits;
     purchase.cost = newCost;
     purchase.amount = amount;
 
+    // 7️⃣ Save updated purchase
     await purchase.save();
+
+    // 8️⃣ Return populated version
     const updated = await Purchase.findById(purchase._id).populate('productRef').lean();
     res.json(updated);
+
   } catch (err) {
     console.error('Error updating purchase:', err);
     res.status(500).json({ error: err.message || 'Failed to update purchase' });
   }
 });
+
 
 // Delete purchase
 router.delete('/purchases/:id', isLoggedIn, async (req, res, next) => {
