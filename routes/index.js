@@ -678,9 +678,9 @@ router.put('/sales/:id', isLoggedIn, async (req, res, next) => {
     const sale = await Sale.findById(req.params.id);
     if (!sale) return res.status(404).json({ error: 'Sale not found' });
 
-    const { productRef, productId, hsnCode, units, cost, vendorId } = req.body;
-    const newUnits = Number(units != null ? units : purchase.units);
-    const newCost = Number(cost != null ? cost : purchase.cost);
+    const { productRef, productId, hsnCode, units, price, customerId } = req.body;
+    const newUnits = Number(units != null ? units : sale.units);
+    const newPrice = Number(price != null ? price : sale.price);
 
     // resolve new product
     let newProduct = null;
@@ -723,7 +723,7 @@ router.put('/sales/:id', isLoggedIn, async (req, res, next) => {
     sale.productName = newProduct.productName;
     sale.units = newUnits;
     sale.price = newPrice;
-    sale.amount = newUnits * newPrice;
+    sale.amount = Number(newUnits * newPrice) || 0;
     sale.customerId = custRef;
     sale.customerName = custName;
     sale.date = req.body.date ? new Date(req.body.date) : sale.date;
