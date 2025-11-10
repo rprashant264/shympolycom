@@ -6,9 +6,9 @@
   <title>Vendors</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <style>
+  <style>
     body { background-color: #f8f9fa; }
-    .inventory-table {  padding: 5% 5%;background: #fff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    .inventory-table { padding: 5% 5%; background: #fff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
     .table-header { background-color: #f8f9fa; font-weight: 600; }
     .table-responsive { border-radius: 8px; }
     .page-wrapper { padding: 1.5rem 0; }
@@ -22,10 +22,12 @@
       <button id="newVendorBtn" class="btn btn-primary">New Vendor</button>
     </div>
 
-    <div  class="table-responsive inventory-table">
+    <div class="table-responsive inventory-table">
       <table class="table table-hover">
         <thead>
-          <tr><th>Vendor_ID</th><th>Name</th><th>Email</th><th>Phone</th><th>Products</th><th>Actions</th></tr>
+          <tr>
+            <th>Vendor_ID</th><th>Name</th><th>Email</th><th>Phone</th><th>Products</th><th>Actions</th>
+          </tr>
         </thead>
         <tbody>
           <% if (typeof vendors !== 'undefined' && vendors.length) { %>
@@ -83,18 +85,18 @@
     const vendorModalEl = document.getElementById('vendorModal');
     const vendorForm = document.getElementById('vendorForm');
     const vendorError = document.getElementById('vendorError');
-  const vendorProductsCheckboxes = document.getElementById('vendorProductsCheckboxes');
+    const vendorProductsCheckboxes = document.getElementById('vendorProductsCheckboxes');
     const vendorsTbody = document.querySelector('tbody');
     let editingVendorId = null;
 
-    if (newVendorBtn) {
-      newVendorBtn.setAttribute('data-bs-toggle', 'modal');
-      newVendorBtn.setAttribute('data-bs-target', '#vendorModal');
-      newVendorBtn.addEventListener('click', () => { editingVendorId = null; vendorForm.reset(); document.querySelector('.modal-title').textContent = 'Add Vendor'; });
-    }
+    // Open modal for new vendor
+    newVendorBtn.addEventListener('click', async () => {
+      editingVendorId = null;
+      vendorForm.reset();
+      document.querySelector('.modal-title').textContent = 'Add Vendor';
+      vendorError.classList.add('d-none');
 
-    // populate products on modal show
-    vendorModalEl.addEventListener('show.bs.modal', async () => {
+      // Fetch products only for "Add Vendor"
       try {
         const res = await fetch('/api/products');
         if (!res.ok) return;
@@ -106,57 +108,125 @@
           </div>
         `).join('');
       } catch (e) { console.error(e); }
+
+      const modal = new bootstrap.Modal(vendorModalEl);
+      modal.show();
     });
 
+    // Save vendor (Add / Edit)
     vendorForm.addEventListener('submit', async (e) => {
       e.preventDefault();
-  const data = Object.fromEntries(new FormData(vendorForm));
-  // handle checkboxes
-  const selected = Array.from(vendorProductsCheckboxes.querySelectorAll('input[type="checkbox"]:checked')).map(o => o.value);
-  data.products = selected;
+      const data = Object.fromEntries(new FormData(vendorForm));
+      const selected = Array.from(vendorProductsCheckboxes.querySelectorAll('input[type="checkbox"]:checked')).map(o => o.value);
+      data.products = selected;
+      vendorError.classList.add('d-none');
+
       try {
+        let res, result;
         if (editingVendorId) {
-          const res = await fetch(`/vendors/${editingVendorId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
-          if (!res.ok) { const err = await res.json(); throw new Error(err.error || 'Failed to update vendor'); }
-          const updated = await res.json();
-          const row = vendorsTbody.querySelector(`tr[data-id="${editingVendorId}"]`);
-          if (row) row.innerHTML = `<td>${updated.vendorId}</td><td>${updated.name}</td><td>${updated.email||''}</td><td>${updated.phone||''}</td><td>${(updated.products||[]).length}</td><td><button class="btn btn-sm btn-outline-primary me-1 btn-edit">Edit</button><button class="btn btn-sm btn-outline-danger btn-delete">Delete</button></td>`;
-          editingVendorId = null; bootstrap.Modal.getInstance(vendorModalEl).hide(); vendorForm.reset();
-          return;
+          res = await fetch(`/vendors/${editingVendorId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+          });
+        } else {
+          res = await fetch('/vendors', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+          });
         }
-        const res = await fetch('/vendors', { method: 'POST', headers: { 'Content-Type':'application/json' }, body: JSON.stringify(data) });
-        if (!res.ok) { const err = await res.json(); throw new Error(err.error || 'Failed to create vendor'); }
-        const created = await res.json();
-        const row = document.createElement('tr'); row.dataset.id = created._id; row.dataset.products = (created.products||[]).join(',');
-        row.innerHTML = `<td>${created.vendorId}</td><td>${created.name}</td><td>${created.email||''}</td><td>${created.phone||''}</td><td>${(created.products||[]).length}</td><td><button class="btn btn-sm btn-outline-primary me-1 btn-edit">Edit</button><button class="btn btn-sm btn-outline-danger btn-delete">Delete</button></td>`;
-        vendorsTbody.appendChild(row);
-        bootstrap.Modal.getInstance(vendorModalEl).hide(); vendorForm.reset();
+
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.error || 'Operation failed');
+        }
+
+        result = await res.json();
+        bootstrap.Modal.getInstance(vendorModalEl).hide();
+
+        // Update UI
+        if (editingVendorId) {
+          const row = vendorsTbody.querySelector(`tr[data-id="${editingVendorId}"]`);
+          if (row) {
+            row.innerHTML = `
+              <td>${result.vendorId}</td>
+              <td>${result.name}</td>
+              <td>${result.email || ''}</td>
+              <td>${result.phone || ''}</td>
+              <td>${(result.products || []).length}</td>
+              <td>
+                <button class="btn btn-sm btn-outline-primary me-1 btn-edit">Edit</button>
+                <button class="btn btn-sm btn-outline-danger btn-delete">Delete</button>
+              </td>
+            `;
+          }
+        } else {
+          const row = document.createElement('tr');
+          row.dataset.id = result._id;
+          row.dataset.products = (result.products || []).join(',');
+          row.innerHTML = `
+            <td>${result.vendorId}</td>
+            <td>${result.name}</td>
+            <td>${result.email || ''}</td>
+            <td>${result.phone || ''}</td>
+            <td>${(result.products || []).length}</td>
+            <td>
+              <button class="btn btn-sm btn-outline-primary me-1 btn-edit">Edit</button>
+              <button class="btn btn-sm btn-outline-danger btn-delete">Delete</button>
+            </td>
+          `;
+          vendorsTbody.appendChild(row);
+        }
+
+        vendorForm.reset();
+        editingVendorId = null;
+
       } catch (err) {
-        vendorError.textContent = err.message; vendorError.classList.remove('d-none');
+        vendorError.textContent = err.message;
+        vendorError.classList.remove('d-none');
       }
     });
 
-    // delegate edit/delete
+    // Handle edit / delete buttons
     vendorsTbody.addEventListener('click', async (e) => {
-      const btn = e.target.closest('button'); if (!btn) return; const tr = btn.closest('tr'); const id = tr.dataset.id;
+      const btn = e.target.closest('button');
+      if (!btn) return;
+      const tr = btn.closest('tr');
+      const id = tr.dataset.id;
+
+      // Delete vendor
       if (btn.classList.contains('btn-delete')) {
         if (!confirm('Delete this vendor?')) return;
-        try { const res = await fetch(`/vendors/${id}`, { method: 'DELETE' }); if (!res.ok) { const err = await res.json(); throw new Error(err.error||'Delete failed'); } tr.remove(); } catch (err) { alert(err.message||'Delete failed'); }
+        try {
+          const res = await fetch(`/vendors/${id}`, { method: 'DELETE' });
+          if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.error || 'Delete failed');
+          }
+          tr.remove();
+        } catch (err) {
+          alert(err.message || 'Delete failed');
+        }
+        return;
       }
+
+      // Edit vendor
       if (btn.classList.contains('btn-edit')) {
         try {
-          // load vendor data
           const res = await fetch(`/api/vendors`);
           if (!res.ok) throw new Error('Failed to load vendors');
           const vendors = await res.json();
           const v = vendors.find(x => String(x._id) === id);
           if (!v) throw new Error('Vendor not found');
-          // populate form
+
+          // Populate form
           vendorForm.querySelector('input[name="name"]').value = v.name || '';
           vendorForm.querySelector('input[name="email"]').value = v.email || '';
           vendorForm.querySelector('input[name="phone"]').value = v.phone || '';
           vendorForm.querySelector('input[name="address"]').value = v.address || '';
-          // populate product checkboxes then mark selected
+
+          // Load and pre-check products
           const prodRes = await fetch('/api/products');
           if (prodRes.ok) {
             const products = await prodRes.json();
@@ -166,13 +236,24 @@
                 <label class="form-check-label" for="product_${p._id}">${p.productName} (${p.hsnCode})</label>
               </div>
             `).join('');
-            // mark selected
+
+            // Mark selected checkboxes
             Array.from(vendorProductsCheckboxes.querySelectorAll('input[type="checkbox"]')).forEach(opt => {
-              opt.checked = (v.products||[]).includes(opt.value);
+              opt.checked = (v.products || []).includes(opt.value);
             });
           }
-          editingVendorId = id; document.querySelector('.modal-title').textContent = 'Edit Vendor'; const modal = new bootstrap.Modal(vendorModalEl); modal.show();
-        } catch (err) { console.error(err); alert('Failed to prepare edit'); }
+
+          editingVendorId = id;
+          document.querySelector('.modal-title').textContent = 'Edit Vendor';
+          vendorError.classList.add('d-none');
+
+          const modal = new bootstrap.Modal(vendorModalEl);
+          modal.show();
+
+        } catch (err) {
+          console.error(err);
+          alert('Failed to prepare edit');
+        }
       }
     });
   </script>
