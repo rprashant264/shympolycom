@@ -674,67 +674,283 @@ router.post('/sales', isLoggedIn, async (req, res, next) => {
 
 // Update sale
 router.put('/sales/:id', isLoggedIn, async (req, res, next) => {
+  // Robust transactional handler for editing a sale.
+  // - Validates inputs (ids, units, price, date)
+  // - Defaults to existing sale product when no product identifier provided
+  // - Uses a mongoose session/transaction to make stock + sale updates atomic
+  // - Returns clear 4xx for invalid input and 500 for other errors
+  let session;
   try {
-    const sale = await Sale.findById(req.params.id);
-    if (!sale) return res.status(404).json({ error: 'Sale not found' });
+    const saleId = req.params.id;
+    if (!mongoose.Types.ObjectId.isValid(saleId)) return res.status(400).json({ error: 'Invalid sale id' });
 
-    const { productRef, productId, hsnCode, units, price, customerId } = req.body;
-    const newUnits = Number(units != null ? units : sale.units);
-    const newPrice = Number(price != null ? price : sale.price);
+    session = await mongoose.startSession();
+    let resultSale = null;
 
-    // resolve new product
-    let newProduct = null;
-    if (productRef || productId) newProduct = await Product.findById(productRef || productId);
-    else if (hsnCode) newProduct = await Product.findOne({ hsnCode });
-    if (!newProduct) return res.status(400).json({ error: 'Product not found for sale' });
-
-    // resolve customer name if provided
-    let custRef = customerId || sale.customerId || null;
-    let custName = req.body.customerName || sale.customerName || '';
-    if (custRef) {
-      try { const cust = await Customer.findById(custRef).lean(); if (cust) custName = cust.name; } catch (e) {}
-    }
-
-    const oldUnits = sale.units || 0;
-    const oldProductId = sale.productRef ? String(sale.productRef) : null;
-    const newProductId = String(newProduct._id);
-
-    if (oldProductId === newProductId) {
-      // same product: check availability (product.stock currently excludes oldUnits)
-      const product = await Product.findById(newProductId).lean();
-      const available = (product.stock || 0) + oldUnits;
-      if (available < newUnits) return res.status(400).json({ error: 'Insufficient stock' });
-      // adjust stock by oldUnits - newUnits
-      await Product.findByIdAndUpdate(newProductId, { $inc: { stock: oldUnits - newUnits } });
-    } else {
-      // different product: restore old product stock, decrement new product stock
-      if (oldProductId) {
-        await Product.findByIdAndUpdate(oldProductId, { $inc: { stock: sale.units } });
+    // Attempt to use a transaction; if the server doesn't support transactions (standalone),
+    // fall back to a safe non-transactional update path.
+    try {
+      await session.withTransaction(async () => {
+        // Load the sale inside the session
+        const sale = await Sale.findById(saleId).session(session);
+      if (!sale) {
+        const err = new Error('Sale not found'); err.status = 404; throw err;
       }
-      // check new product availability
-      const newP = await Product.findById(newProductId).lean();
-      if (!newP || (newP.stock || 0) < newUnits) return res.status(400).json({ error: 'Insufficient stock on new product' });
-      await Product.findByIdAndUpdate(newProductId, { $inc: { stock: -newUnits } });
+
+      // Determine target product (use sale's product when client omits product identifiers)
+      const inputProductId = req.body.productRef || req.body.productId;
+      const inputHsn = req.body.hsnCode;
+      let targetProductId = null;
+
+      if (inputProductId) {
+        if (!mongoose.Types.ObjectId.isValid(String(inputProductId))) {
+          const err = new Error('Invalid product id'); err.status = 400; throw err;
+        }
+        targetProductId = String(inputProductId);
+      } else if (inputHsn) {
+        const p = await Product.findOne({ hsnCode: inputHsn }).session(session);
+        if (!p) { const err = new Error('Product not found for provided HSN'); err.status = 400; throw err; }
+        targetProductId = String(p._id);
+      } else {
+        targetProductId = sale.productRef ? String(sale.productRef) : null;
+      }
+
+      if (!targetProductId) { const err = new Error('No product specified'); err.status = 400; throw err; }
+
+      // Parse and validate numeric inputs
+      const rawUnits = req.body.units != null ? req.body.units : sale.units;
+      const rawPrice = req.body.price != null ? req.body.price : sale.price;
+
+      const newUnits = Number(rawUnits);
+      const newPrice = Number(rawPrice);
+      if (!Number.isFinite(newUnits) || newUnits < 0 || !Number.isInteger(newUnits)) {
+        const err = new Error('Invalid units; must be a non-negative integer'); err.status = 400; throw err;
+      }
+      if (!Number.isFinite(newPrice) || newPrice < 0) { const err = new Error('Invalid price'); err.status = 400; throw err; }
+
+      // Validate and normalize date if provided
+      let newDate = sale.date;
+      if (req.body.date) {
+        const d = new Date(req.body.date);
+        if (isNaN(d.getTime())) { const err = new Error('Invalid date'); err.status = 400; throw err; }
+        newDate = d;
+      }
+
+      // Resolve customer if provided (optional)
+      let custRef = req.body.customerId != null ? req.body.customerId : sale.customerId;
+      if (custRef && !mongoose.Types.ObjectId.isValid(String(custRef))) {
+        const err = new Error('Invalid customer id'); err.status = 400; throw err;
+      }
+      let custName = req.body.customerName || sale.customerName || '';
+      if (custRef) {
+        const c = await Customer.findById(custRef).session(session).lean();
+        if (c) custName = c.name;
+      }
+
+      // Old values
+      const oldUnits = sale.units || 0;
+      const oldProductId = sale.productRef ? String(sale.productRef) : null;
+
+      // Stock checks and updates (all inside the transaction)
+      if (oldProductId === targetProductId) {
+        // same product: compute effective availability by adding back the old sale units
+        const product = await Product.findById(targetProductId).session(session);
+        if (!product) { const err = new Error('Product not found'); err.status = 404; throw err; }
+
+        const effectiveStock = (product.stock || 0) + oldUnits;
+        if (effectiveStock < newUnits) {
+          const err = new Error(`Insufficient stock. Available: ${effectiveStock}, Requested: ${newUnits}`);
+          err.status = 400; throw err;
+        }
+
+        const unitsDiff = newUnits - oldUnits; // positive => need to decrement more
+        if (unitsDiff !== 0) {
+          await Product.findByIdAndUpdate(targetProductId, { $inc: { stock: -unitsDiff } }).session(session);
+        }
+      } else {
+        // different product: validate new product stock first
+        const [oldProduct, newProduct] = await Promise.all([
+          oldProductId ? Product.findById(oldProductId).session(session) : Promise.resolve(null),
+          Product.findById(targetProductId).session(session)
+        ]);
+
+        if (!newProduct) { const err = new Error('New product not found'); err.status = 404; throw err; }
+        if ((newProduct.stock || 0) < newUnits) {
+          const err = new Error(`Insufficient stock on new product. Available: ${newProduct.stock || 0}, Requested: ${newUnits}`);
+          err.status = 400; throw err;
+        }
+
+        // All validations passed; perform stock updates atomically
+        const ops = [];
+        if (oldProductId && oldProduct) {
+          // restore old product's stock
+          ops.push(Product.findByIdAndUpdate(oldProductId, { $inc: { stock: oldUnits } }).session(session));
+        }
+        ops.push(Product.findByIdAndUpdate(targetProductId, { $inc: { stock: -newUnits } }).session(session));
+        await Promise.all(ops);
+      }
+
+      // Update sale document
+  sale.productRef = new mongoose.Types.ObjectId(targetProductId);
+      sale.hsnCode = req.body.hsnCode || sale.hsnCode;
+      sale.productName = req.body.productName || sale.productName;
+      sale.units = newUnits;
+      sale.price = newPrice;
+      sale.amount = Number(newUnits * newPrice) || 0;
+  sale.customerId = custRef ? new mongoose.Types.ObjectId(custRef) : sale.customerId;
+      sale.customerName = custName;
+      sale.date = newDate;
+
+      // Save updated sale WITHOUT triggering save hooks (use findByIdAndUpdate)
+      await Sale.findByIdAndUpdate(sale._id, {
+        productRef: sale.productRef,
+        hsnCode: sale.hsnCode,
+        productName: sale.productName,
+        units: sale.units,
+        price: sale.price,
+        amount: sale.amount,
+        customerId: sale.customerId,
+        customerName: sale.customerName,
+        date: sale.date
+      }, { new: true, runValidators: true, session });
+
+      // Load the saved sale (populate) inside the session so we return the committed state
+      resultSale = await Sale.findById(sale._id).populate('productRef').populate('customerId').session(session).lean();
+      });
+
+      session.endSession();
+      return res.json(resultSale);
+    } catch (txErr) {
+      // Detect transactions-not-supported error message and fall back
+      const msg = String(txErr && txErr.message || '').toLowerCase();
+      if (!/replica set|transaction numbers are only allowed|not a replica set/.test(msg)) {
+        // Not the transactions-unsupported case — rethrow
+        throw txErr;
+      }
+
+      // End session and perform non-transactional fallback
+      try { session.endSession(); } catch (e) {}
+
+      // Non-transactional fallback path
+      // We'll perform the same validations, but use conditional updates to keep operations
+      // as atomic as possible (findOneAndUpdate with $inc and query conditions).
+      // Load sale outside transaction
+      const sale = await Sale.findById(saleId);
+      if (!sale) return res.status(404).json({ error: 'Sale not found' });
+
+      // Determine target product id
+      const inputProductId = req.body.productRef || req.body.productId;
+      const inputHsn = req.body.hsnCode;
+      let targetProductId = null;
+      if (inputProductId) {
+        if (!mongoose.Types.ObjectId.isValid(String(inputProductId))) return res.status(400).json({ error: 'Invalid product id' });
+        targetProductId = String(inputProductId);
+      } else if (inputHsn) {
+        const p = await Product.findOne({ hsnCode: inputHsn });
+        if (!p) return res.status(400).json({ error: 'Product not found for provided HSN' });
+        targetProductId = String(p._id);
+      } else {
+        targetProductId = sale.productRef ? String(sale.productRef) : null;
+      }
+      if (!targetProductId) return res.status(400).json({ error: 'No product specified' });
+
+      // Parse and validate numeric inputs
+      const rawUnits = req.body.units != null ? req.body.units : sale.units;
+      const rawPrice = req.body.price != null ? req.body.price : sale.price;
+      const newUnits = Number(rawUnits);
+      const newPrice = Number(rawPrice);
+      if (!Number.isFinite(newUnits) || newUnits < 0 || !Number.isInteger(newUnits)) return res.status(400).json({ error: 'Invalid units; must be a non-negative integer' });
+      if (!Number.isFinite(newPrice) || newPrice < 0) return res.status(400).json({ error: 'Invalid price' });
+
+      // Validate date
+      let newDate = sale.date;
+      if (req.body.date) {
+        const d = new Date(req.body.date);
+        if (isNaN(d.getTime())) return res.status(400).json({ error: 'Invalid date' });
+        newDate = d;
+      }
+
+      // Resolve customer
+      let custRef = req.body.customerId != null ? req.body.customerId : sale.customerId;
+      if (custRef && !mongoose.Types.ObjectId.isValid(String(custRef))) return res.status(400).json({ error: 'Invalid customer id' });
+      let custName = req.body.customerName || sale.customerName || '';
+      if (custRef) {
+        const c = await Customer.findById(custRef).lean(); if (c) custName = c.name;
+      }
+
+      const oldUnits = sale.units || 0;
+      const oldProductId = sale.productRef ? String(sale.productRef) : null;
+
+      // Non-transactional stock updates
+      if (oldProductId === targetProductId) {
+        // same product: perform conditional update on product to ensure availability
+        const product = await Product.findById(targetProductId);
+        if (!product) return res.status(404).json({ error: 'Product not found' });
+        const effectiveStock = (product.stock || 0) + oldUnits;
+        if (effectiveStock < newUnits) return res.status(400).json({ error: `Insufficient stock. Available: ${effectiveStock}, Requested: ${newUnits}` });
+
+        const unitsDiff = newUnits - oldUnits;
+        if (unitsDiff > 0) {
+          // Need to decrement additional unitsDiff. Use atomic conditional update.
+          const updated = await Product.findOneAndUpdate(
+            { _id: targetProductId, stock: { $gte: unitsDiff } },
+            { $inc: { stock: -unitsDiff } },
+            { new: true }
+          );
+          if (!updated) return res.status(400).json({ error: 'Insufficient stock for the increased units' });
+        } else if (unitsDiff < 0) {
+          // Increase stock by -unitsDiff
+          await Product.findByIdAndUpdate(targetProductId, { $inc: { stock: -unitsDiff } });
+        }
+      } else {
+        // different product: ensure new product has enough stock before mutating
+        const newP = await Product.findById(targetProductId).lean();
+        if (!newP) return res.status(404).json({ error: 'New product not found' });
+        if ((newP.stock || 0) < newUnits) return res.status(400).json({ error: `Insufficient stock on new product. Available: ${newP.stock || 0}, Requested: ${newUnits}` });
+
+        // Restore old product's stock first, then decrement new product's stock
+        if (oldProductId) {
+          await Product.findByIdAndUpdate(oldProductId, { $inc: { stock: oldUnits } });
+        }
+        const dec = await Product.findOneAndUpdate({ _id: targetProductId, stock: { $gte: newUnits } }, { $inc: { stock: -newUnits } }, { new: true });
+        if (!dec) {
+          // Attempt to rollback restore of old product if possible (best-effort)
+          if (oldProductId) await Product.findByIdAndUpdate(oldProductId, { $inc: { stock: -oldUnits } });
+          return res.status(400).json({ error: 'Insufficient stock on new product (race detected)' });
+        }
+      }
+
+      // Update sale document
+  sale.productRef = new mongoose.Types.ObjectId(targetProductId);
+      sale.hsnCode = req.body.hsnCode || sale.hsnCode;
+      sale.productName = req.body.productName || sale.productName;
+      sale.units = newUnits;
+      sale.price = newPrice;
+      sale.amount = Number(newUnits * newPrice) || 0;
+  sale.customerId = custRef ? new mongoose.Types.ObjectId(custRef) : sale.customerId;
+      sale.customerName = custName;
+      sale.date = newDate;
+      // Save updated sale via findByIdAndUpdate to avoid triggering pre/post save hooks
+      await Sale.findByIdAndUpdate(sale._id, {
+        productRef: sale.productRef,
+        hsnCode: sale.hsnCode,
+        productName: sale.productName,
+        units: sale.units,
+        price: sale.price,
+        amount: sale.amount,
+        customerId: sale.customerId,
+        customerName: sale.customerName,
+        date: sale.date
+      }, { new: true, runValidators: true });
+
+      const updatedSale = await Sale.findById(sale._id).populate('productRef').populate('customerId').lean();
+      return res.json(updatedSale);
     }
-
-    // update sale
-    sale.productRef = newProduct._id;
-    sale.hsnCode = newProduct.hsnCode;
-    sale.productName = newProduct.productName;
-    sale.units = newUnits;
-    sale.price = newPrice;
-    sale.amount = Number(newUnits * newPrice) || 0;
-    sale.customerId = custRef;
-    sale.customerName = custName;
-    sale.date = req.body.date ? new Date(req.body.date) : sale.date;
-
-    await sale.save();
-    const updated = await Sale.findById(sale._id).populate('productRef').populate('customerId').lean();
-    res.json(updated);
   } catch (err) {
+    if (session) try { await session.abortTransaction(); session.endSession(); } catch (e) {}
     console.error('Error updating sale:', err);
-    if (err.name === 'ValidationError' || /Insufficient stock/.test(err.message)) return res.status(400).json({ error: err.message });
-    res.status(500).json({ error: err.message || 'Failed to update sale' });
+    if (err && err.status) return res.status(err.status).json({ error: err.message });
+    return res.status(500).json({ error: err.message || 'Failed to update sale' });
   }
 });
 
