@@ -489,114 +489,83 @@ router.post('/purchases', isLoggedIn, async (req, res, next) => {
   }
 });
 
+// Update purchase (correct stock diff handling)
 router.put('/purchases/:id', isLoggedIn, async (req, res) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
-
   try {
-    const purchase = await Purchase.findById(req.params.id).session(session);
-    if (!purchase) {
-      await session.abortTransaction();
-      return res.status(404).json({ error: 'Purchase not found' });
-    }
+    const purchase = await Purchase.findById(req.params.id);
+    if (!purchase) return res.status(404).json({ error: 'Purchase not found' });
 
-    // ---- Normalize old data ----
-    const oldUnits = Number(purchase.units) || 0;
+    const oldUnits = purchase.units || 0;
     const oldProductId = purchase.productRef ? String(purchase.productRef) : null;
 
-    // ---- Get new data ----
+    // new values
     const newUnits = Number(req.body.units ?? oldUnits);
     const newCost = Number(req.body.cost ?? purchase.cost);
-    const newAmount = newUnits * newCost;
+    const amount = newUnits * newCost;
 
-    // ---- Resolve new product ID ----
-    let newProductId = req.body.productRef || req.body.productId || oldProductId;
-
-    if (!newProductId && req.body.hsnCode) {
-      const found = await Product.findOne({ hsnCode: req.body.hsnCode }).lean();
-      if (found) newProductId = String(found._id);
+    // find new product
+    let productId = req.body.productRef || req.body.productId || oldProductId;
+    if (!productId && req.body.hsnCode) {
+      const product = await Product.findOne({ hsnCode: req.body.hsnCode }).lean();
+      if (product) productId = String(product._id);
     }
 
-    if (!newProductId) {
-      await session.abortTransaction();
-      return res.status(400).json({ error: 'No product specified for purchase' });
-    }
+    if (!productId) return res.status(400).json({ error: 'No product specified for purchase' });
 
-    // ---- Normalize both IDs to strings ----
-    const normalizedOldId = oldProductId ? String(oldProductId) : null;
-    const normalizedNewId = newProductId ? String(newProductId) : null;
-
-    const sameProduct =
-      normalizedOldId && normalizedNewId && normalizedOldId === normalizedNewId;
-
-    // ---- Adjust stock correctly ----
-    if (sameProduct) {
-      // ✅ Same product → change only by diff
-      const diff = newUnits - oldUnits;
-      if (diff !== 0) {
-        await Product.findByIdAndUpdate(
-          normalizedNewId,
-          { $inc: { stock: diff } },
-          { session }
-        );
+    // =========================
+    // Handle stock difference
+    // =========================
+    if (String(productId) !== String(oldProductId)) {
+      // product changed → revert old stock, add new stock
+      if (oldProductId) {
+        await Product.findByIdAndUpdate(oldProductId, { $inc: { stock: -oldUnits } });
       }
-    } else {
-      // ⚙️ Product changed → revert old, add new
-      if (normalizedOldId) {
-        await Product.findByIdAndUpdate(
-          normalizedOldId,
-          { $inc: { stock: -oldUnits } },
-          { session }
-        );
-      }
-      await Product.findByIdAndUpdate(
-        normalizedNewId,
-        { $inc: { stock: newUnits } },
-        { session }
-      );
+      await Product.findByIdAndUpdate(productId, { $inc: { stock: newUnits } });
 
-      const np = await Product.findById(normalizedNewId).lean();
+      const np = await Product.findById(productId).lean();
       if (np) {
         purchase.productRef = np._id;
         purchase.hsnCode = np.hsnCode;
         purchase.productName = np.productName;
       }
+    } else {
+      // same product → adjust by difference
+      const diff = newUnits - oldUnits;
+      if (diff !== 0) {
+        await Product.findByIdAndUpdate(productId, { $inc: { stock: diff } });
+      }
     }
 
-    // ---- Vendor Handling ----
+    // =========================
+    // Vendor handling
+    // =========================
     if (req.body.vendorId) {
       const v = await Vendor.findById(req.body.vendorId).lean();
       if (v) {
-        purchase.vendorRef = v._id;
         purchase.vendor = v.name;
+        purchase.vendorRef = v._id;
       }
     } else if (req.body.vendor !== undefined) {
       purchase.vendor = req.body.vendor;
       purchase.vendorRef = null;
     }
 
-    // ---- Update purchase fields ----
+    // =========================
+    // Final field updates
+    // =========================
+    purchase.date = req.body.date ? new Date(req.body.date) : purchase.date;
     purchase.units = newUnits;
     purchase.cost = newCost;
-    purchase.amount = newAmount;
-    if (req.body.date) purchase.date = new Date(req.body.date);
+    purchase.amount = amount;
 
-    await purchase.save({ session });
-    await session.commitTransaction();
-    session.endSession();
+    await purchase.save();
 
-    const updated = await Purchase.findById(purchase._id)
-      .populate('productRef')
-      .populate('vendorRef')
-      .lean();
-
+    const updated = await Purchase.findById(purchase._id).populate('productRef').lean();
     res.json(updated);
 
   } catch (err) {
-    await session.abortTransaction();
-    session.endSession();
     console.error('Error updating purchase:', err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: err.message || 'Failed to update purchase' });
   }
 });
 
