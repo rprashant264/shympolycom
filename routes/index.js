@@ -492,118 +492,73 @@ router.post('/purchases', isLoggedIn, async (req, res, next) => {
 // Update purchase
 router.put('/purchases/:id', isLoggedIn, async (req, res) => {
   try {
-    // 1️⃣ Fetch existing purchase
     const purchase = await Purchase.findById(req.params.id);
     if (!purchase) return res.status(404).json({ error: 'Purchase not found' });
 
     const oldUnits = purchase.units || 0;
     const oldProductId = purchase.productRef ? String(purchase.productRef) : null;
 
-    // 2️⃣ Determine new values
+    // Step 1: Compute new values
     const newUnits = Number(req.body.units ?? oldUnits);
     const newCost = Number(req.body.cost ?? purchase.cost);
     const amount = newUnits * newCost;
 
-    // 3️⃣ Determine new product (from productId, productRef, or hsnCode)
-    let newProductId = req.body.productRef || req.body.productId || null;
+    // Step 2: Identify target product
+    let newProductId = req.body.productRef || req.body.productId || oldProductId;
     if (!newProductId && req.body.hsnCode) {
-      const product = await Product.findOne({ hsnCode: req.body.hsnCode }).lean();
-      if (product) newProductId = String(product._id);
+      const found = await Product.findOne({ hsnCode: req.body.hsnCode }).lean();
+      if (found) newProductId = String(found._id);
     }
 
-    // 4️⃣ STOCK ADJUSTMENT LOGIC
-    if (newProductId && oldProductId && newProductId !== oldProductId) {
-      // Product changed → revert old stock, add to new
-      try {
-        await Product.findByIdAndUpdate(oldProductId, { $inc: { stock: -oldUnits } });
-      } catch (e) { console.error('Failed to decrement old product stock', e); }
+    // Ensure we always have a valid product ID
+    if (!newProductId) {
+      return res.status(400).json({ error: 'No product specified for purchase' });
+    }
 
-      try {
-        await Product.findByIdAndUpdate(newProductId, { $inc: { stock: newUnits } });
-      } catch (e) { console.error('Failed to increment new product stock', e); }
-
-      purchase.productRef = newProductId;
-
-      // Update product details (hsn, name)
-      try {
-        const np = await Product.findById(newProductId).lean();
-        if (np) {
-          purchase.hsnCode = np.hsnCode;
-          purchase.productName = np.productName;
-        }
-      } catch (e) { console.error('Failed to update product details after change', e); }
-
-    } else if (oldProductId) {
-      // Same product → adjust by delta
+    // Step 3: STOCK ADJUSTMENT
+    if (String(newProductId) === String(oldProductId)) {
+      // Same product: adjust by difference only
       const delta = newUnits - oldUnits;
       if (delta !== 0) {
-        try {
-          await Product.findByIdAndUpdate(oldProductId, { $inc: { stock: delta } });
-        } catch (e) { console.error('Failed to update stock delta', e); }
+        await Product.findByIdAndUpdate(oldProductId, { $inc: { stock: delta } });
+      }
+    } else {
+      // Product changed: revert old stock, add new stock
+      await Promise.all([
+        oldProductId ? Product.findByIdAndUpdate(oldProductId, { $inc: { stock: -oldUnits } }) : Promise.resolve(),
+        Product.findByIdAndUpdate(newProductId, { $inc: { stock: newUnits } })
+      ]);
+
+      // Update purchase product fields
+      const np = await Product.findById(newProductId).lean();
+      if (np) {
+        purchase.productRef = np._id;
+        purchase.hsnCode = np.hsnCode;
+        purchase.productName = np.productName;
       }
     }
 
-    // 5️⃣ Vendor Handling
+    // Step 4: Vendor handling
     if (req.body.vendorId) {
-      try {
-        const v = await Vendor.findById(req.body.vendorId).lean();
-        if (v) {
-          purchase.vendor = v.name;
-          purchase.vendorRef = v._id;
-        }
-      } catch (e) {
-        console.error('Failed to resolve vendor by ID:', e);
+      const v = await Vendor.findById(req.body.vendorId).lean();
+      if (v) {
+        purchase.vendor = v.name;
+        purchase.vendorRef = v._id;
       }
     } else if (req.body.vendor !== undefined) {
-      // vendor name explicitly provided (manual text input)
       purchase.vendor = req.body.vendor;
       purchase.vendorRef = null;
-    } else if (newProductId && newProductId !== oldProductId) {
-      // Product changed but no vendor info sent → reconcile vendor if possible
-      if (purchase.vendorRef) {
-        try {
-          const prevVendor = await Vendor.findById(purchase.vendorRef).lean();
-          if (prevVendor && Array.isArray(prevVendor.products) && prevVendor.products.map(String).includes(String(newProductId))) {
-            // Keep same vendor if still supplies the product
-          } else {
-            const suppliers = await Vendor.find({ products: newProductId }).lean();
-            if (suppliers.length === 1) {
-              purchase.vendor = suppliers[0].name;
-              purchase.vendorRef = suppliers[0]._id;
-            } else {
-              purchase.vendor = '';
-              purchase.vendorRef = null;
-            }
-          }
-        } catch (e) {
-          console.error('Failed to reconcile vendor after product change', e);
-        }
-      } else {
-        try {
-          const suppliers = await Vendor.find({ products: newProductId }).lean();
-          if (suppliers.length === 1) {
-            purchase.vendor = suppliers[0].name;
-            purchase.vendorRef = suppliers[0]._id;
-          } else {
-            purchase.vendor = '';
-            purchase.vendorRef = null;
-          }
-        } catch (e) {
-          console.error('Failed to lookup suppliers after product change', e);
-        }
-      }
     }
 
-    // 6️⃣ Finalize fields
+    // Step 5: Finalize fields
     purchase.date = req.body.date ? new Date(req.body.date) : purchase.date;
     purchase.units = newUnits;
     purchase.cost = newCost;
     purchase.amount = amount;
 
-    // 7️⃣ Save updated purchase
     await purchase.save();
 
-    // 8️⃣ Return populated version
+    // Step 6: Return updated record
     const updated = await Purchase.findById(purchase._id).populate('productRef').lean();
     res.json(updated);
 
