@@ -957,6 +957,7 @@ router.post('/products', isLoggedIn, async (req, res, next) => {
     const newProduct = new Product({
       hsnCode: req.body.hsnCode,
       productName: req.body.productName,
+      productWeight: req.body.productWeight,
       cost: req.body.cost,
       sellingPrice: req.body.sellingPrice,
       stock: req.body.stock || 0
