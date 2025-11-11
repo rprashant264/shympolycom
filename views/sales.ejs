@@ -57,31 +57,25 @@
             <table class="table table-hover mb-0">
                 <thead class="table-header">
                     <tr>
-                        <th>Cust_ID</th>
+                        <th>Sale_ID</th>
                         <th>Cust_Name</th>
-                        <th>HSN Code</th>
-                        <th>Product Name</th>
                         <th>Date</th>
-                        <th>Stock(Units)</th>
-                        <th>Units</th>
-                        <th>Price</th>
-                        <th>Amount</th>
+                        <th>Products (Count)</th>
+                        <th>Total Units</th>
+                        <th>Total Amount</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody id="salesTbody">
                   <% if (typeof sales !== 'undefined' && Array.isArray(sales) && sales.length) { %>
                                         <% sales.forEach(function(s) { %>
-                                                                    <tr data-id="<%= s._id %>" data-product-ref="<%= s.productRef || '' %>" data-units="<%= s.units %>" data-price="<%= s.price %>" data-date="<%= s.date %>" data-customer-id="<%= s.customerDbId || '' %>">
-                                                                        <td><%= s.customerId %></td>
+                                                                    <tr data-id="<%= s._id %>" data-customer-id="<%= s.customerId || '' %>" data-date="<%= s.date %>">
+                                                <td><%= s.saleId %></td>
                                                 <td><%= s.customerName %></td>
-                                                <td><%= s.hsnCode %></td>
-                                                <td><%= s.productName %></td>
                                                 <td><%= s.date %></td>
-                                                <td><%= s.stockUnits %></td>
-                                                <td><%= s.units %></td>
-                                                <td>₹<%= Number(s.price).toFixed(2) %></td>
-                                                <td>₹<%= Number(s.amount).toFixed(2) %></td>
+                                                <td><%= s.lineItems ? s.lineItems.length : 0 %></td>
+                                                <td><%= s.totalUnits %></td>
+                                                <td>₹<%= Number(s.totalAmount).toFixed(2) %></td>
                                                 <td>
                                                     <button class="btn btn-sm btn-outline-primary me-1 btn-edit" title="Edit"><i class="fas fa-edit"></i></button>
                                                     <button class="btn btn-sm btn-outline-danger btn-delete" title="Delete"><i class="fas fa-trash"></i></button>
@@ -89,7 +83,7 @@
                                             </tr>
                                         <% }); %>
                   <% } else { %>
-                    <tr><td colspan="10" class="text-center">No sales yet</td></tr>
+                    <tr><td colspan="7" class="text-center">No sales yet</td></tr>
                   <% } %>
                 </tbody>
             </table>
@@ -100,7 +94,7 @@
 
         <!-- Add Sale Modal -->
         <div class="modal fade" id="addSaleModal" tabindex="-1" aria-hidden="true">
-            <div class="modal-dialog">
+            <div class="modal-dialog modal-lg">
                 <form id="addSaleForm" class="modal-content">
                     <div class="modal-header">
                         <h5 class="modal-title">Add Sale</h5>
@@ -108,24 +102,75 @@
                     </div>
                     <div class="modal-body">
                         <div id="addSaleError" class="alert alert-danger d-none"></div>
-                        <div class="mb-3">
-                            <label class="form-label">Product</label>
-                            <select id="saleProductSelect" class="form-select"></select>
-                            <input type="hidden" name="productRef" id="saleProductRef">
-                        </div>
-                        <div class="mb-3"><label class="form-label">HSN Code</label><input name="hsnCode" id="saleHsn" class="form-control" readonly></div>
+                        
+                        <!-- Customer Selection -->
                         <div class="mb-3">
                             <label class="form-label">Customer</label>
                             <select id="saleCustomerSelect" class="form-select"></select>
                             <input type="hidden" name="customerId" id="saleCustomerId">
                         </div>
-                        <div class="mb-3"><label class="form-label">Date</label><input name="date" type="date" class="form-control"></div>
-                        <div class="mb-3"><label class="form-label">Units</label><input name="units" type="number" class="form-control" required></div>
-                        <div class="mb-3"><label class="form-label">Price (per unit)</label><input name="price" type="number" step="0.01" class="form-control" required></div>
+                        
+                        <!-- Date -->
+                        <div class="mb-3">
+                            <label class="form-label">Date</label>
+                            <input name="date" type="date" class="form-control">
+                        </div>
+                        
+                        <!-- Products Section -->
+                        <div class="mb-3">
+                            <label class="form-label">Add Products to Sale</label>
+                            <div class="card">
+                                <div class="card-body">
+                                    <div class="row mb-3">
+                                        <div class="col-md-6">
+                                            <label class="form-label">Product</label>
+                                            <select id="saleProductSelect" class="form-select"></select>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label class="form-label">Qty</label>
+                                            <input id="saleQty" type="number" class="form-control" min="1" value="1">
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label class="form-label">Price</label>
+                                            <input id="salePrice" type="number" step="0.01" class="form-control" min="0">
+                                        </div>
+                                    </div>
+                                    <button type="button" id="addProductBtn" class="btn btn-sm btn-success">
+                                        <i class="fas fa-plus me-1"></i>Add Product
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Line Items Display -->
+                        <div class="mb-3">
+                            <label class="form-label">Products in this Sale</label>
+                            <div class="table-responsive">
+                                <table class="table table-sm table-hover" id="lineItemsTable">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Product</th>
+                                            <th>HSN</th>
+                                            <th>Qty</th>
+                                            <th>Price</th>
+                                            <th>Amount</th>
+                                            <th>Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="lineItemsBody">
+                                        <tr id="emptyMsg"><td colspan="6" class="text-center text-muted">No products added yet</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="alert alert-info d-flex justify-content-between align-items-center">
+                                <span>Total: <strong>₹<span id="totalAmount">0.00</span></strong></span>
+                                <span>Units: <strong><span id="totalUnits">0</span></strong></span>
+                            </div>
+                        </div>
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                        <button type="submit" class="btn btn-primary">Add Sale</button>
+                        <button type="submit" class="btn btn-primary">Save Sale</button>
                     </div>
                 </form>
             </div>
@@ -133,23 +178,17 @@
 
         <script>
             const newSaleBtn = document.getElementById('newSaleBtn');
-            if (newSaleBtn) {
-                newSaleBtn.setAttribute('data-bs-toggle', 'modal');
-                newSaleBtn.setAttribute('data-bs-target', '#addSaleModal');
-            }
-            // ensure Add mode when clicking New
-            if (newSaleBtn) newSaleBtn.addEventListener('click', () => {
-                editingSaleId = null;
-                const title = addSaleModalEl.querySelector('.modal-title'); if (title) title.textContent = 'Add Sale';
-                const submitBtn = addSaleModalEl.querySelector('button[type="submit"]'); if (submitBtn) submitBtn.textContent = 'Add Sale';
-            });
-
             const addSaleForm = document.getElementById('addSaleForm');
             const addSaleError = document.getElementById('addSaleError');
             const salesTbody = document.getElementById('salesTbody');
             const saleProductSelect = document.getElementById('saleProductSelect');
-            const saleProductRef = document.getElementById('saleProductRef');
-            const saleHsn = document.getElementById('saleHsn');
+            const saleQty = document.getElementById('saleQty');
+            const salePrice = document.getElementById('salePrice');
+            const addProductBtn = document.getElementById('addProductBtn');
+            const lineItemsBody = document.getElementById('lineItemsBody');
+            const lineItemsTable = document.getElementById('lineItemsTable');
+            const totalAmountSpan = document.getElementById('totalAmount');
+            const totalUnitsSpan = document.getElementById('totalUnits');
             const saleCustomerSelect = document.getElementById('saleCustomerSelect');
             const saleCustomerId = document.getElementById('saleCustomerId');
 
@@ -157,22 +196,102 @@
             const salesSearchInput = document.getElementById('salesSearchInput');
             const salesSearchButton = document.getElementById('salesSearchButton');
 
+            // Store line items temporarily during edit
+            let lineItems = [];
+            let editingSaleId = null;
+
+            const addSaleModalEl = document.getElementById('addSaleModal');
+
+            // Update price field when product changes
+            saleProductSelect.addEventListener('change', (e) => {
+                const opt = e.target.selectedOptions[0];
+                if (opt && opt.value) {
+                    salePrice.value = opt.dataset.price || '';
+                } else {
+                    salePrice.value = '';
+                }
+            });
+
+            // Add product to line items
+            addProductBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                const productOpt = saleProductSelect.selectedOptions[0];
+                if (!productOpt || !productOpt.value) {
+                    alert('Please select a product');
+                    return;
+                }
+                const qty = parseInt(saleQty.value) || 0;
+                const price = parseFloat(salePrice.value) || 0;
+                
+                if (qty <= 0) { alert('Quantity must be > 0'); return; }
+                if (price < 0) { alert('Price cannot be negative'); return; }
+
+                const lineItem = {
+                    productRef: productOpt.value,
+                    hsnCode: productOpt.dataset.hsn || '',
+                    productName: productOpt.textContent,
+                    units: qty,
+                    price: price,
+                    amount: qty * price
+                };
+
+                lineItems.push(lineItem);
+                renderLineItems();
+                saleProductSelect.value = '';
+                saleQty.value = '1';
+                salePrice.value = '';
+                saleProductSelect.focus();
+            });
+
+            function renderLineItems() {
+                lineItemsBody.innerHTML = '';
+                if (lineItems.length === 0) {
+                    lineItemsBody.innerHTML = '<tr id="emptyMsg"><td colspan="6" class="text-center text-muted">No products added yet</td></tr>';
+                } else {
+                    let totalAmount = 0;
+                    let totalUnits = 0;
+                    lineItems.forEach((item, idx) => {
+                        totalAmount += item.amount;
+                        totalUnits += item.units;
+                        const row = document.createElement('tr');
+                        row.innerHTML = `
+                            <td>${item.productName}</td>
+                            <td>${item.hsnCode}</td>
+                            <td>${item.units}</td>
+                            <td>₹${Number(item.price).toFixed(2)}</td>
+                            <td>₹${Number(item.amount).toFixed(2)}</td>
+                            <td><button type="button" class="btn btn-sm btn-outline-danger btn-remove-item" data-idx="${idx}"><i class="fas fa-trash"></i></button></td>
+                        `;
+                        lineItemsBody.appendChild(row);
+                    });
+                    totalAmountSpan.textContent = totalAmount.toFixed(2);
+                    totalUnitsSpan.textContent = totalUnits;
+                }
+            }
+
+            // Remove line item
+            lineItemsBody.addEventListener('click', (e) => {
+                const btn = e.target.closest('.btn-remove-item');
+                if (btn) {
+                    const idx = parseInt(btn.dataset.idx);
+                    lineItems.splice(idx, 1);
+                    renderLineItems();
+                }
+            });
+
             function performSalesSearch(term) {
                 term = (term || '').toLowerCase();
                 const rows = [...salesTbody.querySelectorAll('tr')];
                 rows.forEach(row => {
-                    // skip template/empty rows that use colspan
                     if (row.querySelector('td[colspan]')) {
-                        // show when term empty, hide otherwise
                         row.style.display = term ? 'none' : '';
                         return;
                     }
                     const cells = row.cells;
-                    const custId = (cells[0]?.textContent || '').toLowerCase();
+                    const saleId = (cells[0]?.textContent || '').toLowerCase();
                     const custName = (cells[1]?.textContent || '').toLowerCase();
-                    const hsn = (cells[2]?.textContent || '').toLowerCase();
-                    const productName = (cells[3]?.textContent || '').toLowerCase();
-                    if (custId.includes(term) || custName.includes(term) || hsn.includes(term) || productName.includes(term)) {
+                    const products = (cells[3]?.textContent || '').toLowerCase();
+                    if (saleId.includes(term) || custName.includes(term) || products.includes(term)) {
                         row.style.display = '';
                     } else {
                         row.style.display = 'none';
@@ -183,148 +302,180 @@
             if (salesSearchInput) salesSearchInput.addEventListener('input', (e) => performSalesSearch(e.target.value));
             if (salesSearchButton) salesSearchButton.addEventListener('click', () => performSalesSearch(salesSearchInput.value));
 
-            const addSaleModalEl = document.getElementById('addSaleModal');
-            // editing flag (null when adding, id when editing)
-            let editingSaleId = null;
+            // Modal show event
             addSaleModalEl.addEventListener('show.bs.modal', async () => {
-                if (editingSaleId) return; // editing flow populates selects itself
-                // load products
+                if (editingSaleId) return; // Keep line items for editing
+                
+                lineItems = [];
+                renderLineItems();
+                
                 try {
                     const [pRes, cRes] = await Promise.all([fetch('/api/products'), fetch('/api/customers')]);
                     if (pRes.ok) {
                         const products = await pRes.json();
-                        saleProductSelect.innerHTML = '<option value="">-- Select product --</option>' + products.map(p => `<option value="${p._id}" data-hsn="${p.hsnCode}" data-name="${p.productName}" data-stock="${p.stock || 0}">${p.productName} (${p.hsnCode})</option>`).join('');
+                        saleProductSelect.innerHTML = '<option value="">-- Select product --</option>' + products.map(p => `<option value="${p._id}" data-hsn="${p.hsnCode}" data-price="${p.sellingPrice || p.cost || 0}">${p.productName} (${p.hsnCode})</option>`).join('');
                     }
                     if (cRes.ok) {
                         const customers = await cRes.json();
-                        saleCustomerSelect.innerHTML = '<option value="">-- Select customer --</option>' + customers.map(c => `<option value="${c._id}" data-name="${c.name}">${c.name} (${c.custId || ''})</option>`).join('');
+                        saleCustomerSelect.innerHTML = '<option value="">-- Select customer --</option>' + customers.map(c => `<option value="${c._id}">${c.name}</option>`).join('');
                     }
                 } catch (err) {
-                    console.error('Failed to load products/customers for sale modal', err);
+                    console.error('Failed to load data for modal', err);
                 }
             });
 
-            // Reset editing state when modal hidden
+            // Modal hidden event
             addSaleModalEl.addEventListener('hidden.bs.modal', () => {
-                editingSaleId = null;
-                const title = addSaleModalEl.querySelector('.modal-title'); if (title) title.textContent = 'Add Sale';
-                const submitBtn = addSaleModalEl.querySelector('button[type="submit"]'); if (submitBtn) submitBtn.textContent = 'Add Sale';
-                addSaleError.classList.add('d-none');
-            });
-
-            saleProductSelect.addEventListener('change', (e) => {
-                const opt = e.target.selectedOptions[0];
-                if (!opt || !opt.value) {
-                    saleHsn.value = '';
-                    saleProductRef.value = '';
-                    return;
+                if (!editingSaleId) {
+                    editingSaleId = null;
+                    lineItems = [];
+                    renderLineItems();
                 }
-                saleHsn.value = opt.dataset.hsn || '';
-                saleProductRef.value = opt.value;
+                const title = addSaleModalEl.querySelector('.modal-title');
+                if (title) title.textContent = 'Add Sale';
+                const submitBtn = addSaleModalEl.querySelector('button[type="submit"]');
+                if (submitBtn) submitBtn.textContent = 'Save Sale';
+                addSaleError.classList.add('d-none');
             });
 
             saleCustomerSelect.addEventListener('change', (e) => {
                 const opt = e.target.selectedOptions[0];
-                if (!opt || !opt.value) {
-                    saleCustomerId.value = '';
-                    return;
-                }
-                saleCustomerId.value = opt.value;
-                // also set customerName field if the form has one for display (not required)
-                const nameField = addSaleForm.querySelector('input[name="customerName"]');
-                if (nameField) nameField.value = opt.dataset.name || '';
+                saleCustomerId.value = opt && opt.value ? opt.value : '';
             });
 
+            // New Sale button
+            if (newSaleBtn) {
+                newSaleBtn.addEventListener('click', () => {
+                    editingSaleId = null;
+                    lineItems = [];
+                    addSaleForm.reset();
+                    const modal = new bootstrap.Modal(addSaleModal);
+                    modal.show();
+                });
+            }
+
+            // Form submit
             addSaleForm.addEventListener('submit', async (e) => {
                 e.preventDefault();
-                const data = Object.fromEntries(new FormData(addSaleForm));
-                // ensure IDs are present
-                if (!data.productRef && saleProductSelect.value) data.productRef = saleProductSelect.value;
-                if (!data.customerId && saleCustomerSelect.value) data.customerId = saleCustomerSelect.value;
+                
+                if (lineItems.length === 0) {
+                    alert('Please add at least one product');
+                    return;
+                }
+                
+                const customerId = saleCustomerId.value;
+                const date = addSaleForm.querySelector('input[name="date"]').value;
+                
+                if (!customerId) {
+                    alert('Please select a customer');
+                    return;
+                }
+
+                const data = {
+                    customerId,
+                    date: date || new Date().toISOString().split('T')[0],
+                    lineItems
+                };
+
                 try {
                     if (editingSaleId) {
-                        const res = await fetch(`/sales/${editingSaleId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
-                        if (!res.ok) { const err = await res.json(); throw new Error(err.error || 'Failed to update sale'); }
-                        const updated = await res.json();
-                        const row = salesTbody.querySelector(`tr[data-id="${editingSaleId}"]`);
-                        if (row) {
-                            row.dataset.productRef = (updated.productRef && updated.productRef._id) || updated.productRef || '';
-                            row.dataset.units = updated.units || 0;
-                            row.dataset.price = updated.price || 0;
-                            row.dataset.date = updated.date ? updated.date.toString().slice(0,10) : '';
-                            row.dataset.customerId = (updated.customerId && updated.customerId._id) || updated.customerId || '';
-                            row.innerHTML = `<td>${updated.customerId || ''}</td><td>${updated.customerName || ''}</td><td>${updated.hsnCode}</td><td>${updated.productName}</td><td>${updated.date ? updated.date.toString().slice(0,10) : ''}</td><td>${updated.stockUnits || ''}</td><td>${updated.units}</td><td>₹${Number(updated.price).toFixed(2)}</td><td>₹${Number(updated.amount).toFixed(2)}</td><td><button class="btn btn-sm btn-outline-primary me-1 btn-edit"><i class="fas fa-edit"></i></button><button class="btn btn-sm btn-outline-danger btn-delete"><i class="fas fa-trash"></i></button></td>`;
+                        const res = await fetch(`/sales/${editingSaleId}`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(data)
+                        });
+                        if (!res.ok) {
+                            const err = await res.json();
+                            throw new Error(err.error || 'Failed to update sale');
                         }
-                        editingSaleId = null;
-                        addSaleForm.reset();
-                        bootstrap.Modal.getInstance(addSaleModalEl).hide();
+                        location.reload();
                         return;
                     }
 
-                    const res = await fetch('/sales', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
-                    if (!res.ok) { const err = await res.json(); throw new Error(err.error || 'Failed to create sale'); }
-                    const created = await res.json();
-                    const row = document.createElement('tr'); row.dataset.id = created._id;
-                    row.dataset.productRef = (created.productRef && created.productRef._id) || created.productRef || '';
-                    row.dataset.units = created.units || 0;
-                    row.dataset.price = created.price || 0;
-                    row.dataset.date = created.date ? created.date.toString().slice(0,10) : '';
-                    row.dataset.customerId = (created.customerId && created.customerId._id) || created.customerId || '';
-                    row.innerHTML = `<td>${created.customerId || ''}</td><td>${created.customerName || ''}</td><td>${created.hsnCode}</td><td>${created.productName}</td><td>${created.date ? created.date.toString().slice(0,10) : ''}</td><td>${created.stockUnits || ''}</td><td>${created.units}</td><td>₹${Number(created.price).toFixed(2)}</td><td>₹${Number(created.amount).toFixed(2)}</td><td><button class="btn btn-sm btn-outline-primary me-1 btn-edit"><i class="fas fa-edit"></i></button><button class="btn btn-sm btn-outline-danger btn-delete"><i class="fas fa-trash"></i></button></td>`;
-                    salesTbody.appendChild(row);
-                    bootstrap.Modal.getInstance(addSaleModalEl).hide();
-                    addSaleForm.reset();
+                    const res = await fetch('/sales', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(data)
+                    });
+                    if (!res.ok) {
+                        const err = await res.json();
+                        throw new Error(err.error || 'Failed to create sale');
+                    }
+                    location.reload();
                 } catch (err) {
-                    addSaleError.textContent = err.message; addSaleError.classList.remove('d-none');
+                    addSaleError.textContent = err.message;
+                    addSaleError.classList.remove('d-none');
                 }
             });
 
-            // delegate edit/delete actions for sales
+            // Delegate edit/delete actions
             salesTbody.addEventListener('click', async (e) => {
-                const btn = e.target.closest('button'); if (!btn) return;
-                const tr = btn.closest('tr'); const id = tr.dataset.id;
+                const btn = e.target.closest('button');
+                if (!btn) return;
+                const tr = btn.closest('tr');
+                const id = tr.dataset.id;
+
                 if (btn.classList.contains('btn-delete')) {
                     if (!confirm('Delete this sale?')) return;
                     try {
                         const res = await fetch(`/sales/${id}`, { method: 'DELETE' });
-                        if (!res.ok) { const err = await res.json(); throw new Error(err.error || 'Failed to delete'); }
+                        if (!res.ok) {
+                            const err = await res.json();
+                            throw new Error(err.error || 'Failed to delete');
+                        }
                         tr.remove();
-                    } catch (err) { alert(err.message || 'Delete failed'); }
+                    } catch (err) {
+                        alert(err.message || 'Delete failed');
+                    }
                 }
+
                 if (btn.classList.contains('btn-edit')) {
                     try {
-                        // load products/customers and populate selects, then set fields
+                        const res = await fetch(`/sales/${id}`);
+                        if (!res.ok) throw new Error('Failed to load sale');
+                        const sale = await res.json();
+                        
+                        // Populate line items
+                        lineItems = (sale.lineItems || []).map(item => ({
+                            productRef: item.productRef && item.productRef._id ? item.productRef._id : item.productRef,
+                            hsnCode: item.hsnCode,
+                            productName: item.productName,
+                            units: item.units,
+                            price: item.price,
+                            amount: item.amount
+                        }));
+                        
+                        // Load products/customers
                         const [pRes, cRes] = await Promise.all([fetch('/api/products'), fetch('/api/customers')]);
                         if (pRes.ok) {
                             const products = await pRes.json();
-                            saleProductSelect.innerHTML = '<option value="">-- Select product --</option>' + products.map(p => `<option value="${p._id}" data-hsn="${p.hsnCode}" data-name="${p.productName}" data-stock="${p.stock || 0}">${p.productName} (${p.hsnCode})</option>`).join('');
+                            saleProductSelect.innerHTML = '<option value="">-- Select product --</option>' + products.map(p => `<option value="${p._id}" data-hsn="${p.hsnCode}" data-price="${p.sellingPrice || p.cost || 0}">${p.productName} (${p.hsnCode})</option>`).join('');
                         }
                         if (cRes.ok) {
                             const customers = await cRes.json();
-                            saleCustomerSelect.innerHTML = '<option value="">-- Select customer --</option>' + customers.map(c => `<option value="${c._id}" data-name="${c.name}">${c.name} (${c.custId || ''})</option>`).join('');
+                            saleCustomerSelect.innerHTML = '<option value="">-- Select customer --</option>' + customers.map(c => `<option value="${c._id}">${c.name}</option>`).join('');
                         }
 
-                        // set selected product/customer
-                        const productRef = tr.dataset.productRef || '';
-                        const custId = tr.dataset.customerId || '';
-                        if (productRef) saleProductSelect.value = productRef;
-                        const opt = saleProductSelect.selectedOptions[0];
-                        if (opt) { saleHsn.value = opt.dataset.hsn || ''; saleProductRef.value = opt.value || ''; }
-                        if (custId) saleCustomerSelect.value = custId; const copt = saleCustomerSelect.selectedOptions[0]; if (copt) saleCustomerId.value = copt.value || '';
-
-                        // set other fields
-                        addSaleForm.querySelector('input[name="units"]').value = tr.dataset.units || '';
-                        addSaleForm.querySelector('input[name="price"]').value = tr.dataset.price || '';
-                        addSaleForm.querySelector('input[name="date"]').value = tr.dataset.date || '';
-
+                        // Set form values
+                        if (saleCustomerSelect.querySelector(`option[value="${sale.customerId && sale.customerId._id ? sale.customerId._id : sale.customerId}"]`)) {
+                            saleCustomerSelect.value = sale.customerId && sale.customerId._id ? sale.customerId._id : sale.customerId;
+                        }
+                        const dateField = addSaleForm.querySelector('input[name="date"]');
+                        if (dateField && sale.date) {
+                            dateField.value = sale.date.split('T')[0];
+                        }
+                        
                         editingSaleId = id;
-                        // set modal to edit mode
-                        const title = addSaleModalEl.querySelector('.modal-title'); if (title) title.textContent = 'Edit Sale';
-                        const submitBtn = addSaleModalEl.querySelector('button[type="submit"]'); if (submitBtn) submitBtn.textContent = 'Save Changes';
-                        const modal = new bootstrap.Modal(addSaleModalEl); modal.show();
+                        renderLineItems();
+                        const title = addSaleModalEl.querySelector('.modal-title');
+                        if (title) title.textContent = 'Edit Sale';
+                        const submitBtn = addSaleModalEl.querySelector('button[type="submit"]');
+                        if (submitBtn) submitBtn.textContent = 'Save Changes';
+                        const modal = new bootstrap.Modal(addSaleModalEl);
+                        modal.show();
                     } catch (err) {
-                        console.error('Failed to prepare sale edit', err);
-                        alert('Failed to prepare edit');
+                        console.error('Failed to load sale for edit', err);
+                        alert('Failed to load sale');
                     }
                 }
             });
