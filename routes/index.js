@@ -1167,6 +1167,52 @@ router.get('/sales', isLoggedIn, async (req, res, next) => {
 });
 
 
+// ============================
+// GET single sale by ID (for editing)
+// ============================
+router.get('/sales/:id', isLoggedIn, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const sale = await Sale.findById(id)
+      .populate({
+        path: 'lineItems.productRef',
+        select: 'productName hsnCode stock price'
+      })
+      .populate({
+        path: 'customerId',
+        select: 'custId name'
+      })
+      .lean();
+
+    if (!sale) return res.status(404).json({ error: 'Sale not found' });
+
+    const normalizedLineItems = (sale.lineItems || []).map(item => ({
+      productRef: item.productRef?._id || item.productRef,
+      hsnCode: item.hsnCode || item.productRef?.hsnCode || '',
+      productName: item.productName || item.productRef?.productName || '',
+      stockUnits: item.productRef?.stock || 0,
+      units: item.units || 0,
+      price: item.price || 0,
+      amount: item.amount || 0
+    }));
+
+    res.json({
+      _id: sale._id,
+      saleId: sale.saleId || '',
+      customerId: sale.customerId?.custId || '',
+      customerDbId: sale.customerId?._id || '',
+      customerName: sale.customerName || sale.customerId?.name || '',
+      date: sale.date ? new Date(sale.date).toISOString().slice(0, 10) : '',
+      totalAmount: sale.totalAmount || 0,
+      totalUnits: sale.totalUnits || 0,
+      lineItems: normalizedLineItems
+    });
+  } catch (err) {
+    console.error('Error fetching single sale:', err);
+    res.status(500).json({ error: 'Failed to load sale' });
+  }
+});
 
 // Auth middleware
   // Salary page
