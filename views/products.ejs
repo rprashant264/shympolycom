@@ -47,6 +47,7 @@
             <th>Weight</th>
             <th>Cost</th>
             <th>Selling Price</th>
+            <th>Stock Units</th>
             <th>Actions</th>
           </tr>
         </thead>
@@ -59,6 +60,7 @@
                 <td><%= p.productWeight %></td>
                 <td>₹<%= Number(p.cost).toFixed(2) %></td>
                 <td>₹<%= Number(p.sellingPrice).toFixed(2) %></td>
+                <td><%= p.stock %></td>
                 <td>
                   <button class="btn btn-sm btn-outline-primary me-1 btn-edit" title="Edit"><i class="fas fa-edit"></i></button>
                   <button class="btn btn-sm btn-outline-danger btn-delete" title="Delete"><i class="fas fa-trash"></i></button>
