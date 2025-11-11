@@ -79,6 +79,7 @@
                                                 <td>
                                                     <button class="btn btn-sm btn-outline-primary me-1 btn-edit" title="Edit"><i class="fas fa-edit"></i></button>
                                                     <button class="btn btn-sm btn-outline-danger btn-delete" title="Delete"><i class="fas fa-trash"></i></button>
+                                                     <button class="btn btn-sm btn-outline-success btn-print" title="Print"><i class="fas fa-print"></i></button>
                                                 </td>
                                             </tr>
                                         <% }); %>
@@ -479,7 +480,90 @@
                     }
                 }
             });
+
+
+// Print sale details
+salesTbody.addEventListener('click', async (e) => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    const tr = btn.closest('tr');
+    const id = tr.dataset.id;
+
+    // 🖨 Handle Print Button
+    if (btn.classList.contains('btn-print')) {
+        try {
+            const res = await fetch(`/sales/${id}`);
+            if (!res.ok) throw new Error('Failed to load sale');
+            const sale = await res.json();
+
+            // Generate printable HTML
+            const printWindow = window.open('', '_blank');
+            printWindow.document.write(`
+                <html>
+                <head>
+                    <title>Sale Invoice - ${sale.saleId}</title>
+                    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+                    <style>
+                        body { padding: 20px; font-family: Arial, sans-serif; }
+                        h2 { text-align: center; margin-bottom: 20px; }
+                        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+                        th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+                        th { background: #f8f9fa; }
+                        .summary { margin-top: 20px; font-size: 1rem; }
+                        .summary strong { color: #000; }
+                    </style>
+                </head>
+                <body>
+                    <h2>Sale Invoice</h2>
+                    <p><strong>Sale ID:</strong> ${sale.saleId}</p>
+                    <p><strong>Customer:</strong> ${sale.customerId?.name || 'N/A'}</p>
+                    <p><strong>Date:</strong> ${new Date(sale.date).toLocaleDateString()}</p>
+
+                    <table class="table table-bordered">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Product</th>
+                                <th>HSN</th>
+                                <th>Qty</th>
+                                <th>Price</th>
+                                <th>Amount</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${(sale.lineItems || []).map((item, i) => `
+                                <tr>
+                                    <td>${i + 1}</td>
+                                    <td>${item.productRef?.productName || item.productName || ''}</td>
+                                    <td>${item.hsnCode || ''}</td>
+                                    <td>${item.units}</td>
+                                    <td>₹${Number(item.price).toFixed(2)}</td>
+                                    <td>₹${Number(item.amount).toFixed(2)}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+
+                    <div class="summary">
+                        <p><strong>Total Units:</strong> ${sale.totalUnits}</p>
+                        <p><strong>Total Amount:</strong> ₹${Number(sale.totalAmount).toFixed(2)}</p>
+                    </div>
+
+                    <div class="text-center mt-4">
+                        <button onclick="window.print()" class="btn btn-success">Print</button>
+                    </div>
+                </body>
+                </html>
+            `);
+            printWindow.document.close();
+        } catch (err) {
+            console.error('Print failed', err);
+            alert('Failed to load sale details for printing');
+        }
+    }
+});
         </script>
+
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
