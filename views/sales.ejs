@@ -75,7 +75,9 @@
                                                 <td><%= s.date %></td>
                                                 <td>
                                                   <% if (s.lineItems && s.lineItems.length) { %>
-                                                    <%= s.lineItems.map(item => item.productName).join(', ') %>
+                                                    <% s.lineItems.forEach(item => { %>
+                                                      <div><%= item.productName %></div>
+                                                    <% }) %>
                                                   <% } else { %>
                                                     No products
                                                   <% } %>
