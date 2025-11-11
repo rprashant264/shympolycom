@@ -618,7 +618,7 @@ salesTbody.addEventListener('click', async (e) => {
                                         <td>${i + 1}</td>
                                         <td>${item.productName || ''}</td>
                                         <td>${item.units}</td>
-                                        <td>${item.Weight*item.units}</td>
+                                        <td>${item.productWeight ? (item.productWeight * item.units).toFixed(3) : '-'}</td>
                                         <td></td>
                                         <td></td>
                                     </tr>
