@@ -606,60 +606,63 @@ router.delete('/purchases/:id', isLoggedIn, async (req, res, next) => {
   }
 });
 
-// Create sale
+// Create sale - now supports multiple products (lineItems)
 router.post('/sales', isLoggedIn, async (req, res, next) => {
   try {
-    // accept productRef id or hsnCode, and customerId
-    const { productRef, productId, hsnCode, units, price, customerId } = req.body;
-    let product = null;
-    if (productRef || productId) {
-      const id = productRef || productId;
-      product = await Product.findById(id);
-    } else if (hsnCode) {
-      product = await Product.findOne({ hsnCode });
+    const { customerId, date, lineItems } = req.body;
+    
+    // Validate inputs
+    if (!customerId) return res.status(400).json({ error: 'Customer is required' });
+    if (!Array.isArray(lineItems) || lineItems.length === 0) {
+      return res.status(400).json({ error: 'At least one product is required' });
     }
 
-    if (!product) return res.status(400).json({ error: 'Product not found for sale' });
+    // Validate and enrich line items
+    const enrichedLineItems = [];
+    let totalAmount = 0;
+    let totalUnits = 0;
 
-    const unitsNum = Number(units || 0);
-    const priceNum = Number(price || product.sellingPrice || product.cost || 0);
-    if (product.stock < unitsNum) {
-      return res.status(400).json({ error: 'Insufficient stock' });
-    }
-
-    const amount = unitsNum * priceNum;
-
-    // If customerId provided, resolve customerName from DB
-    let custName = req.body.customerName || '';
-    let custRef = customerId || null;
-    if (custRef) {
-      try {
-        const cust = await Customer.findById(custRef).lean();
-        if (cust) custName = cust.name;
-      } catch (e) {
-        // ignore lookup error here; will be validated by schema
+    for (const item of lineItems) {
+      const product = await Product.findById(item.productRef);
+      if (!product) {
+        return res.status(400).json({ error: `Product not found: ${item.productName}` });
       }
+      if (product.stock < item.units) {
+        return res.status(400).json({ error: `Insufficient stock for ${item.productName}. Available: ${product.stock}, Requested: ${item.units}` });
+      }
+
+      enrichedLineItems.push({
+        productRef: product._id,
+        hsnCode: product.hsnCode,
+        productName: product.productName,
+        units: Number(item.units),
+        price: Number(item.price),
+        amount: Number(item.units) * Number(item.price)
+      });
+
+      totalAmount += enrichedLineItems[enrichedLineItems.length - 1].amount;
+      totalUnits += Number(item.units);
     }
+
+    // Get customer name
+    const customer = await Customer.findById(customerId).lean();
+    if (!customer) return res.status(400).json({ error: 'Customer not found' });
 
     const sale = new Sale({
-      customerId: custRef,
-      customerName: custName,
-      hsnCode: product.hsnCode,
-      productName: product.productName,
-      date: req.body.date ? new Date(req.body.date) : Date.now(),
-      units: unitsNum,
-      price: priceNum,
-      amount,
-      productRef: product._id
+      customerId,
+      customerName: customer.name,
+      date: date ? new Date(date) : Date.now(),
+      lineItems: enrichedLineItems,
+      totalAmount,
+      totalUnits
     });
 
     await sale.save();
-    const saved = await Sale.findById(sale._id).populate('productRef').populate('customerId').lean();
+    const saved = await Sale.findById(sale._id).populate('customerId').lean();
     res.status(201).json(saved);
   } catch (err) {
     console.error('Error creating sale:', err);
-    // Validation-like errors -> 400
-    if (err.name === 'ValidationError' || /Insufficient stock/.test(err.message)) {
+    if (err.name === 'ValidationError') {
       return res.status(400).json({ error: err.message });
     }
     res.status(500).json({ error: err.message || 'Failed to create sale' });
