@@ -1126,7 +1126,7 @@ router.get('/sales', isLoggedIn, async (req, res, next) => {
     const sales = await Sale.find()
       .populate({
         path: 'lineItems.productRef',        // ✅ nested populate
-        select: 'productName hsnCode stock price'
+        select: 'productName productWeight hsnCode stock price'
       })
       .populate({
         path: 'customerId',                  // ✅ populate customer
@@ -1179,7 +1179,7 @@ router.get('/sales/:id', isLoggedIn, async (req, res) => {
     const sale = await Sale.findById(id)
       .populate({
         path: 'lineItems.productRef',
-        select: 'productName stock price'
+        select: 'productName productWeight stock price'
       })
       .populate({
         path: 'customerId',
