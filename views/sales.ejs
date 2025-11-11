@@ -606,9 +606,9 @@ salesTbody.addEventListener('click', async (e) => {
                                 <tr>
                                     <th>#</th>
                                     <th>Product</th>
-                                    <th>Quantity</th>
-                                    <th>Weight</th>
-                                    <th>Price (₹)</th>
+                                    <th>Boxes</th>
+                                    <th>Weight/Unit</th>
+                                    <th>Rate/Unit (₹)</th>
                                     <th>Amount (₹)</th>
                                 </tr>
                             </thead>
@@ -626,10 +626,16 @@ salesTbody.addEventListener('click', async (e) => {
                             </tbody>
                         </table>
 
-                        <div class="summary">
-                            <p><strong>Total Units:</strong> ${sale.totalUnits || ''}</p>
-                            <p><strong>Total Amount (₹):</strong> ___________</p>
-                        </div>
+                    <div class="summary" style="text-align: left; margin-top: 30px;">
+                        <p><strong>Total Units:</strong> ${sale.totalUnits || ''}</p>
+                        <p><strong>Total Weight (kg):</strong> ${
+                            (sale.lineItems || [])
+                              .reduce((acc, item) => acc + ((item.productWeight || 0) * (item.units || 0)), 0)
+                              .toFixed(3)
+                        }</p>
+                        <p><strong>Total Amount (₹):</strong> ${sale.totalAmount ? sale.totalAmount.toFixed(2) : '0.00'}</p>
+                    </div>
+
 
                         <div class="signature-section">
                             <div class="signature-box">Customer Signature</div>
