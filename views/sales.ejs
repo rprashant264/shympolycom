@@ -586,7 +586,7 @@ salesTbody.addEventListener('click', async (e) => {
                         </div>
 
                         <div class="invoice-details">
-                            <p><strong>Customer Name:</strong> ${sale.customerId ? sale.customerId.name : ''}</p>
+                            <p><strong>Customer Name:</strong> <%= sale.customerName %></p>
                             <p><strong>Date:</strong> ${new Date(sale.date).toLocaleDateString()}</p>
                         </div>
 
