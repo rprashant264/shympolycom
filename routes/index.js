@@ -669,7 +669,6 @@ router.post('/sales', isLoggedIn, async (req, res, next) => {
   }
 });
 
-// Update sale
 // Update sale (multi-product version, transaction-safe)
 router.put('/sales/:id', isLoggedIn, async (req, res) => {
   let session;
@@ -874,9 +873,11 @@ router.delete('/sales/:id', isLoggedIn, async (req, res, next) => {
     const sale = await Sale.findById(req.params.id);
     if (!sale) return res.status(404).json({ error: 'Sale not found' });
 
-    // restore stock
-    if (sale.productRef) {
-      await Product.findByIdAndUpdate(sale.productRef, { $inc: { stock: sale.units } });
+    // Restore stock for all line items
+    if (Array.isArray(sale.lineItems)) {
+      for (const item of sale.lineItems) {
+        await Product.findByIdAndUpdate(item.productRef, { $inc: { stock: item.units } });
+      }
     }
 
     await Sale.findByIdAndDelete(req.params.id);
