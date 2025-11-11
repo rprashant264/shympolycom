@@ -1115,42 +1115,42 @@ router.get('/purchases', isLoggedIn, async (req, res, next) => {
   }
 });
 
-// Sales page
+// GET all sales
 router.get('/sales', isLoggedIn, async (req, res, next) => {
   try {
     const sales = await Sale.find()
       .populate({
-        path: 'lineItems.productRef', // ✅ nested populate
-        select: 'productName hsnCode stock price' // optional: only these fields
+        path: 'lineItems.productRef',        // ✅ nested populate
+        select: 'productName hsnCode stock price'
       })
       .populate({
-        path: 'customerId',
-        select: 'custId name' // optional
+        path: 'customerId',                  // ✅ populate customer
+        select: 'custId name'
       })
       .sort({ createdAt: -1 })
       .lean();
 
-    // ✅ Transform for frontend display
+    // Normalize data for frontend
     const normalized = sales.map(sale => {
-      const items = sale.lineItems.map(item => ({
+      const items = (sale.lineItems || []).map(item => ({
         productRef: item.productRef?._id || item.productRef,
-        hsnCode: item.hsnCode || item.productRef?.hsnCode,
-        productName: item.productName || item.productRef?.productName,
+        hsnCode: item.hsnCode || item.productRef?.hsnCode || '',
+        productName: item.productName || item.productRef?.productName || '',
         stockUnits: item.productRef?.stock || 0,
-        units: item.units,
-        price: item.price,
-        amount: item.amount
+        units: item.units || 0,
+        price: item.price || 0,
+        amount: item.amount || 0
       }));
 
       return {
         _id: sale._id,
-        saleId: sale.saleId,
+        saleId: sale.saleId || '',
         customerId: sale.customerId?.custId || '',
         customerDbId: sale.customerId?._id || '',
         customerName: sale.customerName || sale.customerId?.name || '',
-        date: sale.date ? sale.date.toISOString().slice(0, 10) : '',
-        totalAmount: sale.totalAmount,
-        totalUnits: sale.totalUnits,
+        date: sale.date ? new Date(sale.date).toISOString().slice(0, 10) : '',
+        totalAmount: sale.totalAmount || 0,
+        totalUnits: sale.totalUnits || 0,
         lineItems: items
       };
     });
