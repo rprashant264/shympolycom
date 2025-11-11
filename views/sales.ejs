@@ -73,7 +73,13 @@
                                                 <td><%= s.saleId %></td>
                                                 <td><%= s.customerName %></td>
                                                 <td><%= s.date %></td>
-                                                <td><%= s.lineItems ? s.lineItems.length : 0 %></td>
+                                                <td>
+                                                  <% if (s.lineItems && s.lineItems.length) { %>
+                                                    <%= s.lineItems.map(item => item.productName).join(', ') %>
+                                                  <% } else { %>
+                                                    No products
+                                                  <% } %>
+                                                </td>
                                                 <td><%= s.totalUnits %></td>
                                                 <td>₹<%= Number(s.totalAmount).toFixed(2) %></td>
                                                 <td>
