@@ -607,6 +607,7 @@ salesTbody.addEventListener('click', async (e) => {
                                     <th>#</th>
                                     <th>Product</th>
                                     <th>Quantity</th>
+                                    <th>Weight</th>
                                     <th>Price (₹)</th>
                                     <th>Amount (₹)</th>
                                 </tr>
@@ -617,6 +618,7 @@ salesTbody.addEventListener('click', async (e) => {
                                         <td>${i + 1}</td>
                                         <td>${item.productName || ''}</td>
                                         <td>${item.units}</td>
+                                        <td>${item.Weight*item.units}</td>
                                         <td></td>
                                         <td></td>
                                     </tr>
