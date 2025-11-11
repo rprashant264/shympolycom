@@ -1119,28 +1119,45 @@ router.get('/purchases', isLoggedIn, async (req, res, next) => {
 router.get('/sales', isLoggedIn, async (req, res, next) => {
   try {
     const sales = await Sale.find()
-      .populate('productRef')
-      .populate('customerId')
+      .populate({
+        path: 'lineItems.productRef', // ✅ nested populate
+        select: 'productName hsnCode stock price' // optional: only these fields
+      })
+      .populate({
+        path: 'customerId',
+        select: 'custId name' // optional
+      })
       .sort({ createdAt: -1 })
       .lean();
-    const normalized = sales.map(s => ({
-      _id: s._id,
-      // customerId (display) is the human-friendly custId, keep separately from DB _id
-      customerId: s.customerId ? s.customerId.custId : '',
-      customerDbId: s.customerId ? (s.customerId._id || s.customerId) : '',
-      customerName: s.customerName || (s.customerId && s.customerId.name),
-      // include productRef DB id separately so UI can select by id when editing
-      productRef: s.productRef ? (s.productRef._id || s.productRef) : '',
-      hsnCode: s.hsnCode || (s.productRef && s.productRef.hsnCode),
-      productName: s.productName || (s.productRef && s.productRef.productName),
-      date: s.date ? s.date.toISOString().slice(0,10) : '',
-      stockUnits: s.stockUnits || (s.productRef && s.productRef.stock) || 0,
-      units: s.units,
-      price: s.price,
-      amount: s.amount
-    }));
+
+    // ✅ Transform for frontend display
+    const normalized = sales.map(sale => {
+      const items = sale.lineItems.map(item => ({
+        productRef: item.productRef?._id || item.productRef,
+        hsnCode: item.hsnCode || item.productRef?.hsnCode,
+        productName: item.productName || item.productRef?.productName,
+        stockUnits: item.productRef?.stock || 0,
+        units: item.units,
+        price: item.price,
+        amount: item.amount
+      }));
+
+      return {
+        _id: sale._id,
+        saleId: sale.saleId,
+        customerId: sale.customerId?.custId || '',
+        customerDbId: sale.customerId?._id || '',
+        customerName: sale.customerName || sale.customerId?.name || '',
+        date: sale.date ? sale.date.toISOString().slice(0, 10) : '',
+        totalAmount: sale.totalAmount,
+        totalUnits: sale.totalUnits,
+        lineItems: items
+      };
+    });
+
     res.render('sales', { sales: normalized });
   } catch (err) {
+    console.error('Error fetching sales:', err);
     next(err);
   }
 });
