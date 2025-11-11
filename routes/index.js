@@ -1177,7 +1177,7 @@ router.get('/sales/:id', isLoggedIn, async (req, res) => {
     const sale = await Sale.findById(id)
       .populate({
         path: 'lineItems.productRef',
-        select: 'productName hsnCode stock price'
+        select: 'productName stock price'
       })
       .populate({
         path: 'customerId',
@@ -1189,8 +1189,7 @@ router.get('/sales/:id', isLoggedIn, async (req, res) => {
 
     const normalizedLineItems = (sale.lineItems || []).map(item => ({
       productRef: item.productRef?._id || item.productRef,
-      hsnCode: item.hsnCode || item.productRef?.hsnCode || '',
-      productName: item.productName || item.productRef?.productName || '',
+      productName: item.productRef?.productName || '',
       stockUnits: item.productRef?.stock || 0,
       units: item.units || 0,
       price: item.price || 0,
@@ -1202,7 +1201,7 @@ router.get('/sales/:id', isLoggedIn, async (req, res) => {
       saleId: sale.saleId || '',
       customerId: sale.customerId?.custId || '',
       customerDbId: sale.customerId?._id || '',
-      customerName: sale.customerName || sale.customerId?.name || '',
+      customerName: sale.customerId?.name || '',
       date: sale.date ? new Date(sale.date).toISOString().slice(0, 10) : '',
       totalAmount: sale.totalAmount || 0,
       totalUnits: sale.totalUnits || 0,
