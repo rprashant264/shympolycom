@@ -206,6 +206,7 @@
         row.innerHTML = `
           <td>${newProduct.hsnCode}</td>
           <td>${newProduct.productName}</td>
+          <td>${newProduct.productWeight}</td>
           <td>₹${Number(newProduct.cost).toFixed(2)}</td>
           <td>₹${Number(newProduct.sellingPrice).toFixed(2)}</td>
           <td>
@@ -247,8 +248,9 @@
         form.querySelector('[name="productId"]').value = id;
         form.querySelector('[name="hsnCode"]').value = cells[0].textContent;
         form.querySelector('[name="productName"]').value = cells[1].textContent;
-        form.querySelector('[name="cost"]').value = cells[2].textContent.replace('₹', '');
-        form.querySelector('[name="sellingPrice"]').value = cells[3].textContent.replace('₹', '');
+        form.querySelector('[name="productWeight"]').value = cells[2].textContent;
+        form.querySelector('[name="cost"]').value = cells[3].textContent.replace('₹', '');
+        form.querySelector('[name="sellingPrice"]').value = cells[4].textContent.replace('₹', '');
         
         const editModal = new bootstrap.Modal(editProductModal);
         editModal.show();
@@ -304,6 +306,7 @@
           row.innerHTML = `
             <td>${updatedProduct.hsnCode}</td>
             <td>${updatedProduct.productName}</td>
+            <td>${updatedProduct.productWeight}</td>
             <td>₹${Number(updatedProduct.cost).toFixed(2)}</td>
             <td>₹${Number(updatedProduct.sellingPrice).toFixed(2)}</td>
             <td>
