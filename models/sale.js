@@ -1,6 +1,8 @@
 const mongoose = require('mongoose');
 
-// Line item schema for products in a sale
+// ===========================================
+// 🔹 Line item schema for products in a sale
+// ===========================================
 const saleLineItemSchema = new mongoose.Schema({
   productRef: {
     type: mongoose.Schema.Types.ObjectId,
@@ -14,6 +16,10 @@ const saleLineItemSchema = new mongoose.Schema({
   amount: { type: Number, required: true }
 }, { _id: false });
 
+
+// ===========================================
+// 🔹 Main Sale Schema
+// ===========================================
 const saleSchema = new mongoose.Schema({
   saleId: { type: String, required: true, unique: true },
   customerId: {
@@ -29,9 +35,9 @@ const saleSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 
-// ===================================================
+// ===========================================
 // 🔹 Auto-generate saleId and compute totals
-// ===================================================
+// ===========================================
 saleSchema.pre('validate', async function (next) {
   try {
     if (!this.saleId) {
@@ -43,15 +49,17 @@ saleSchema.pre('validate', async function (next) {
       this.saleId = `S${String(lastNumber + 1).padStart(3, '0')}`;
     }
 
-    // Always recompute totals
+    // Recalculate totals before validation
     this.totalAmount = 0;
     this.totalUnits = 0;
+
     if (Array.isArray(this.lineItems)) {
       this.lineItems.forEach(item => {
         this.totalAmount += item.amount || 0;
         this.totalUnits += item.units || 0;
       });
     }
+
     next();
   } catch (err) {
     next(err);
@@ -59,14 +67,14 @@ saleSchema.pre('validate', async function (next) {
 });
 
 
-// ===================================================
-// 🔹 Validate stock before saving (only for direct .save())
-// ===================================================
+// ===========================================
+// 🔹 Validate stock before saving
+// ===========================================
 saleSchema.pre('save', async function (next) {
   try {
     const Product = mongoose.model('Product');
 
-    // Skip validation if session/transaction will handle it
+    // Skip validation if session handles it
     if (this.$locals && this.$locals.skipStockValidation) return next();
 
     if (!Array.isArray(this.lineItems) || this.lineItems.length === 0) {
@@ -86,6 +94,7 @@ saleSchema.pre('save', async function (next) {
         );
       }
     }
+
     next();
   } catch (err) {
     next(err);
@@ -93,14 +102,12 @@ saleSchema.pre('save', async function (next) {
 });
 
 
-// ===================================================
-// 🔹 Deduct stock after saving (only if not already handled)
-// ===================================================
+// ===========================================
+// 🔹 Deduct stock after saving
+// ===========================================
 saleSchema.post('save', async function () {
   try {
     const Product = mongoose.model('Product');
-
-    // Skip if stock was already adjusted inside a transaction
     if (this.$locals && this.$locals.stockHandledByTransaction) return;
 
     if (Array.isArray(this.lineItems)) {
@@ -116,9 +123,9 @@ saleSchema.post('save', async function () {
 });
 
 
-// ===================================================
-// 🔹 Revert stock when a sale is removed
-// ===================================================
+// ===========================================
+// 🔹 Revert stock when sale is removed
+// ===========================================
 saleSchema.pre('remove', async function (next) {
   try {
     const Product = mongoose.model('Product');
@@ -149,5 +156,16 @@ saleSchema.post('findByIdAndDelete', async function (doc) {
     console.error('Error reverting stock after sale deletion:', err);
   }
 });
+
+
+// ===========================================
+// 🔹 Static helper for correct population
+// ===========================================
+saleSchema.statics.findWithPopulation = function () {
+  return this.find()
+    .populate('customerId', 'customerName')
+    .populate('lineItems.productRef', 'productName stock price');
+};
+
 
 module.exports = mongoose.model('Sale', saleSchema);
