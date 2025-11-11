@@ -1141,6 +1141,7 @@ router.get('/sales', isLoggedIn, async (req, res, next) => {
         productRef: item.productRef?._id || item.productRef,
         hsnCode: item.hsnCode || item.productRef?.hsnCode || '',
         productName: item.productName || item.productRef?.productName || '',
+        productWeight: item.productRef?.productWeight || 0,
         stockUnits: item.productRef?.stock || 0,
         units: item.units || 0,
         price: item.price || 0,
@@ -1191,6 +1192,7 @@ router.get('/sales/:id', isLoggedIn, async (req, res) => {
     const normalizedLineItems = (sale.lineItems || []).map(item => ({
       productRef: item.productRef?._id || item.productRef,
       productName: item.productRef?.productName || '',
+      productWeight: item.productRef?.productWeight || 0,
       stockUnits: item.productRef?.stock || 0,
       units: item.units || 0,
       price: item.price || 0,
