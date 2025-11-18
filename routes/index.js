@@ -14,6 +14,7 @@ const Employee = require('../models/employee');
 const Sale = require('../models/sale');
 const Purchase = require('../models/purchase');
 const Vendor = require('../models/vendor');
+const Gatepass = require('../models/gatepass');
 
 
 // Home Page (Public)
