@@ -608,6 +608,7 @@ router.delete('/purchases/:id', isLoggedIn, async (req, res, next) => {
 });
 
 // Create sale - now supports multiple products (lineItems)
+// Create sale - now supports multiple products (lineItems)
 router.post('/sales', isLoggedIn, async (req, res, next) => {
   try {
     const { customerId, date, lineItems } = req.body;
@@ -638,7 +639,7 @@ router.post('/sales', isLoggedIn, async (req, res, next) => {
         productName: product.productName,
         units: Number(item.units),
         price: Number(item.price),
-        amount: Number(item.units) * Number(item.price)
+        amount: Number(item.units) * Number(item.price) * Number(item.productWeight)
       });
 
       totalAmount += enrichedLineItems[enrichedLineItems.length - 1].amount;
@@ -869,6 +870,7 @@ router.put('/sales/:id', isLoggedIn, async (req, res) => {
   }
 });
 // Delete sale
+// Delete sale
 router.delete('/sales/:id', isLoggedIn, async (req, res, next) => {
   try {
     const sale = await Sale.findById(req.params.id);
@@ -888,7 +890,6 @@ router.delete('/sales/:id', isLoggedIn, async (req, res, next) => {
     res.status(500).json({ error: err.message || 'Failed to delete sale' });
   }
 });
-
 // Feed page
 router.get('/feed', isLoggedIn, async (req, res, next) => {
   try {
