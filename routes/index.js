@@ -5,7 +5,6 @@ const userModel = require("./users");
 const postModel = require("./posts");
 const passport = require('passport');
 const upload = require('./multer');
-
 // Import all models
 const Product = require('../models/product');
 const Customer = require('../models/customer');
