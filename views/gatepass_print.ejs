@@ -1,0 +1,31 @@
+<!doctype html>
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Gatepass Print — Removed</title>
+    <link rel="stylesheet" href="/stylesheets/style.css" />
+  </head>
+  <body>
+    <div class="container mt-4">
+      <div class="alert alert-warning">Gatepass printable view is no longer available. The feature was removed.</div>
+    </div>
+  </body>
+</html>
+              <td style="text-align:right;"><%= p.units || 0 %></td>
+              <td style="text-align:right;"><%= p.productWeight != null ? p.productWeight : '-' %></td>
+            </tr>
+          <% }); %>
+        </tbody>
+      </table>
+
+      <!-- Minimal summary -->
+      <div class="totals" style="margin-top:12px;">
+        Total Units: <%= gp.totalUnits || 0 %>
+      </div>
+
+      <script>window.onload = function(){ window.print(); };</script>
+    </div>
+  </body>
+</html>

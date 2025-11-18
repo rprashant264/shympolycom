@@ -12,7 +12,6 @@ const flash = require('connect-flash');
 
 // Routers
 const indexRouter = require('./routes/index');
-const usersRouter = require('./routes/users');
 
 // Models
 const User = require('./models/User'); // ✅ Make sure you have this file
@@ -20,9 +19,7 @@ const User = require('./models/User'); // ✅ Make sure you have this file
 const app = express();
 
 // -------------------- DATABASE CONNECTION --------------------
-mongoose.connect(process.env.MONGO_URI ||  'mongodb+srv://rprashant264_db_user:R57pLoNPxUVIHo3J@cluster0.bixhvvz.mongodb.net/mydatabase?retryWrites=true&w=majority')
-  .then(() => console.log('✅ MongoDB connected successfully'))
-  .catch(err => console.error('❌ MongoDB connection error:', err));
+// MongoDB connection is handled in config/database.js
 
 // -------------------- SESSION CONFIGURATION --------------------
 const sessionConfig = {
@@ -36,7 +33,7 @@ const sessionConfig = {
     maxAge: 1000 * 60 * 60 * 24 * 7, // 1 week
   },
   store: MongoStore.create({
-    mongoUrl: process.env.MONGO_URI ||  'mongodb+srv://rprashant264_db_user:R57pLoNPxUVIHo3J@cluster0.bixhvvz.mongodb.net/mydatabase?retryWrites=true&w=majority',
+    mongoUrl: process.env.MONGODB_URI || 'mongodb://localhost:27017/shyam_polycom',
     ttl: 24 * 60 * 60,
     autoRemove: 'interval',
     autoRemoveInterval: 24 * 60,
@@ -72,11 +69,18 @@ app.use((req, res, next) => {
 
 // -------------------- ROUTES --------------------
 app.use('/', indexRouter);
-app.use('/users', usersRouter);
+
+// -------------------- STATIC ASSETS --------------------
+// Handle favicon and other common browser requests silently
+app.get('/favicon.ico', (req, res) => res.status(204).end());
+app.get('/.well-known/appspecific/com.chrome.devtools.json', (req, res) => res.status(204).end());
+app.get('/apple-touch-icon.png', (req, res) => res.status(204).end());
+app.get('/robots.txt', (req, res) => res.status(204).end());
 
 // -------------------- DATABASE READY CHECK --------------------
 app.use((req, res, next) => {
   if (mongoose.connection.readyState !== 1) {
+    console.warn('Database connection not ready. State:', mongoose.connection.readyState);
     return res.status(503).json({ error: 'Database connection not ready' });
   }
   next();
@@ -90,6 +94,7 @@ app.use((req, res, next) => {
 
 // Error handler
 app.use((err, req, res, next) => {
+  console.error('Error caught by error handler:', err);
   res.locals.message = err.message;
   res.locals.error = req.app.get('env') === 'development' ? err : {};
   res.status(err.status || 500);

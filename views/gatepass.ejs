@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Gatepass Generation</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+  <style>
+    body { background-color: #f8f9fa; }
+    .page-wrapper { padding: 2rem 0; }
+    .container-main { background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); padding: 2rem; }
+    
+    .section-header {
+      display: flex;
+      align-items: center;
+      margin-bottom: 2rem;
+      padding-bottom: 1rem;
+      border-bottom: 3px solid #007bff;
+    }
+    
+    .section-header i { font-size: 1.5rem; margin-right: 0.5rem; color: #007bff; }
+    .section-header h3 { margin: 0; color: #333; }
+    
+    .sale-card {
+      cursor: pointer;
+      transition: all 0.3s ease;
+      border: 2px solid #e0e0e0;
+      border-radius: 8px;
+    }
+    
+    .sale-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      border-color: #007bff;
+    }
+    
+    .sale-card.selected {
+      border-color: #28a745;
+      background-color: #f0f9ff;
+    }
+    
+    .card-header-custom {
+      background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+      color: white;
+      padding: 0.75rem 1rem;
+      border-radius: 6px 6px 0 0;
+    }
+    
+    .sale-card .card-body { padding: 1rem; }
+    
+    .product-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 0.4rem 0;
+      font-size: 0.9rem;
+    }
+    
+    .product-item strong { color: #333; }
+    .product-item span { color: #666; }
+    
+    .gatepass-form-container {
+      background: #f8f9fa;
+      border-left: 4px solid #007bff;
+      padding: 1.5rem;
+      border-radius: 6px;
+      margin-bottom: 2rem;
+    }
+    
+    .form-label { font-weight: 600; color: #333; }
+    
+    .selected-sale-info {
+      background: #e7f1ff;
+      border: 1px solid #b3d9ff;
+      padding: 1rem;
+      border-radius: 6px;
+      margin-bottom: 1rem;
+      display: none;
+    }
+    
+    .selected-sale-info.show { display: block; }
+    
+    .badge-custom { background: #007bff; color: white; }
+    
+    .generated-card {
+      background: #f0f9ff;
+      border: 2px solid #28a745;
+      border-radius: 8px;
+      padding: 1rem;
+      margin-bottom: 1rem;
+    }
+    
+    .generated-card .gatepass-id {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: #28a745;
+      margin-bottom: 0.5rem;
+    }
+    
+    .generated-products {
+      background: white;
+      padding: 0.75rem;
+      border-radius: 4px;
+      margin-top: 0.75rem;
+    }
+    
+    .generated-products .product-item { padding: 0.3rem 0; }
+    
+    .btn-primary-custom { background: #007bff; border: none; }
+    .btn-primary-custom:hover { background: #0056b3; }
+    
+    .alert-custom { padding: 1rem; border-radius: 6px; }
+    
+    .no-data { text-align: center; padding: 2rem; color: #999; }
+
+    /* Print styles for the generated print window */
+    .print-btn { background: #007bff; color: white; padding: 6px 12px; border-radius: 4px; border: none; }
+    .close-btn { background: #dc3545; color: white; padding: 6px 12px; border-radius: 4px; border: none; }
+  </style>
+</head>
+<body>
+  <%- include('partials/nav', { current: 'gatepass' }) %>
+
+  <div class="container page-wrapper">
+    <div class="container-main">
+      <h1 class="mb-4"><i class="fas fa-file-signature me-2"></i>Gatepass Management</h1>
+
+      <!-- DEBUG: Show raw data (for troubleshooting) -->
+      <details style="background: #f0f0f0; padding: 1rem; margin-bottom: 1rem; border-radius: 6px;">
+        <summary style="cursor: pointer; font-weight: bold; color: #666;">📋 Debug Info (Click to expand)</summary>
+        <div style="margin-top: 1rem; background: white; padding: 1rem; border-radius: 4px; overflow: auto; max-height: 400px;">
+          <pre><code>Pending Sales: <%= pendingSales.length %>
+Generated Sales: <%= generatedSales.length %>
+
+SAMPLE PENDING SALE:
+<%- JSON.stringify(pendingSales[0], null, 2) %>
+
+SAMPLE GENERATED SALE:
+<%- JSON.stringify(generatedSales[0], null, 2) %>
+          </code></pre>
+        </div>
+      </details>
+
+      <% if (errors) { %>
+        <div class="alert alert-danger alert-custom"><%= errors %></div>
+      <% } %>
+
+      <!-- ===== PENDING SECTION ===== -->
+      <div class="mb-5">
+        <div class="section-header">
+          <i class="fas fa-clock"></i>
+          <h3>Pending Gatepasses</h3>
+        </div>
+
+        <% if (pendingSales && pendingSales.length > 0) { %>
+          <!-- Sales Cards Grid -->
+          <div class="row g-3 mb-4">
+            <% pendingSales.forEach(function(sale) { %>
+              <div class="col-md-4">
+                <div class="sale-card" data-sale-id="<%= sale._id %>" data-sale-data="<%= JSON.stringify(sale) %>">
+                  <div class="card-header-custom">
+                    <div class="d-flex justify-content-between">
+                      <strong><%= sale.saleId %></strong>
+                      <small><%= sale.date %></small>
+                    </div>
+                  </div>
+                  <div class="card-body">
+                    <div class="mb-2"><strong><%= sale.customerName %></strong></div>
+                    <div class="product-item">
+                      <strong>Products:</strong>
+                      <span class="badge badge-custom"><%= sale.products.length %></span>
+                    </div>
+                    <div class="generated-products">
+                      <% sale.products.forEach(function(p) { %>
+                        <div class="product-item">
+                          <span><%= p.productName %></span>
+                          <strong><%= p.quantity %> pcs</strong>
+                        </div>
+                      <% }); %>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            <% }); %>
+          </div>
+
+          <!-- Form Section -->
+          <div class="gatepass-form-container">
+            <h5 class="mb-3"><i class="fas fa-plus-circle me-2"></i>Create Gatepass</h5>
+            
+            <div class="selected-sale-info" id="selectedSaleInfo">
+              <strong>Selected Sale:</strong> <span id="selectedSaleName"></span>
+            </div>
+
+            <form id="gatepassForm">
+              <input type="hidden" id="saleId" name="saleId" value="">
+              
+              <div class="row g-3">
+                <div class="col-md-6">
+                  <label for="vehicleNumber" class="form-label">Vehicle Number <span class="text-danger">*</span></label>
+                  <input 
+                    type="text" 
+                    class="form-control" 
+                    id="vehicleNumber" 
+                    name="vehicleNumber" 
+                    placeholder="e.g., KA-01-AB-1234"
+                    required
+                  >
+                </div>
+
+                <div class="col-md-6">
+                  <label for="driverName" class="form-label">Driver Name</label>
+                  <input 
+                    type="text" 
+                    class="form-control" 
+                    id="driverName" 
+                    name="driverName" 
+                    placeholder="Driver name (optional)"
+                  >
+                </div>
+              </div>
+
+              <div class="row mt-3">
+                <div class="col-12">
+                  <button type="submit" class="btn btn-primary btn-primary-custom" id="generateBtn">
+                    <i class="fas fa-file-circle-plus me-2"></i>Generate Gatepass
+                  </button>
+                  <button type="reset" class="btn btn-outline-secondary ms-2" id="resetBtn">
+                    <i class="fas fa-redo me-2"></i>Reset
+                  </button>
+                </div>
+              </div>
+
+              <div id="formError" class="alert alert-danger alert-custom mt-3" style="display: none;"></div>
+              <div id="formSuccess" class="alert alert-success alert-custom mt-3" style="display: none;"></div>
+            </form>
+          </div>
+        <% } else { %>
+          <div class="alert alert-info alert-custom">
+            <i class="fas fa-info-circle me-2"></i>No pending sales. All sales have gatepasses generated.
+          </div>
+        <% } %>
+      </div>
+
+      <!-- ===== GENERATED SECTION ===== -->
+      <div>
+        <div class="section-header">
+          <i class="fas fa-check-circle"></i>
+          <h3>Generated Gatepasses</h3>
+        </div>
+
+        <div class="mb-3 text-end">
+          <!-- Ensure type=button so it doesn't submit forms -->
+          <button type="button" class="btn btn-success btn-sm" id="printSelectedBtn">
+            <i class="fas fa-print me-1"></i>Print Selected (Max 6)
+          </button>
+        </div>
+
+        <% if (generatedSales && generatedSales.length > 0) { %>
+          <div class="row g-3">
+            <% generatedSales.forEach(function(sale) { %>
+              <div class="col-md-6">
+                <div class="generated-card" data-gatepass-id="<%= sale.gatepass._id %>">
+                  <div class="gatepass-id">
+                    <i class="fas fa-check-circle me-2" style="color: #28a745;"></i><%= sale.gatepass.gatepassId %>
+                  </div>
+                  
+                  <div class="row mt-2">
+                    <div class="col-6">
+                      <small class="text-muted"><strong>Sale ID:</strong></small>
+                      <div class="sale-id-value"><%= sale.saleId %></div>
+                    </div>
+                    <div class="col-6">
+                      <small class="text-muted"><strong>Date:</strong></small>
+                      <div class="date-value"><%= sale.date %></div>
+                    </div>
+                  </div>
+
+                  <div class="row mt-2">
+                    <div class="col-6">
+                      <small class="text-muted"><strong>Customer:</strong></small>
+                      <div class="customer-value"><%= sale.customerName %></div>
+                    </div>
+                    <div class="col-6">
+                      <small class="text-muted"><strong>Vehicle:</strong></small>
+                      <div class="vehicle-value"><strong><%= sale.gatepass.vehicleNumber %></strong></div>
+                    </div>
+                  </div>
+
+                  <% if (sale.gatepass.driverName) { %>
+                    <div class="mt-2 driver-row">
+                      <small class="text-muted"><strong>Driver:</strong></small>
+                      <div class="driver-value"><%= sale.gatepass.driverName %></div>
+                    </div>
+                  <% } %>
+
+                  <div class="mt-3">
+                    <strong class="text-muted"><i class="fas fa-box me-1"></i>Products:</strong>
+                    <div class="generated-products">
+                      <% 
+                        const displayProducts = sale.gatepass.products?.length 
+                          ? sale.gatepass.products 
+                          : sale.products; 
+                      %>
+                      <% displayProducts.forEach(function(p) { %>
+                        <div class="product-item">
+                          <span class="product-name"><%= p.productName %></span>
+                          <strong class="product-qty"><%= p.quantity %> pcs</strong>
+                        </div>
+                      <% }); %>
+                    </div>
+                  </div>
+
+                  <div class="mt-3 d-flex align-items-center">
+                    <input 
+                      type="checkbox" 
+                      class="form-check-input me-2 gatepass-select" 
+                      value="<%= sale.gatepass._id %>"
+                      id="select-<%= sale.gatepass._id %>"
+                    >
+                    <label class="form-check-label me-auto" for="select-<%= sale.gatepass._id %>">Select for Multi Print</label>
+
+                    <button type="button" class="btn btn-sm btn-outline-primary single-print-btn" data-gatepass-id="<%= sale.gatepass._id %>">
+                      <i class="fas fa-print me-1"></i>Print
+                    </button>
+                  </div>
+
+                </div>
+              </div>
+            <% }); %>
+          </div>
+        <% } else { %>
+          <div class="alert alert-info alert-custom">
+            <i class="fas fa-info-circle me-2"></i>No gatepasses generated yet.
+          </div>
+        <% } %>
+      </div>
+
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      // Cached elements
+      const saleCards = Array.from(document.querySelectorAll('.sale-card'));
+      const saleIdInput = document.getElementById('saleId');
+      const selectedSaleInfo = document.getElementById('selectedSaleInfo');
+      const selectedSaleName = document.getElementById('selectedSaleName');
+      const gatepassForm = document.getElementById('gatepassForm');
+      const generateBtn = document.getElementById('generateBtn');
+      const resetBtn = document.getElementById('resetBtn');
+      const formError = document.getElementById('formError');
+      const formSuccess = document.getElementById('formSuccess');
+
+      // Helper to safely get text from the card label structure
+      function getValueAfterLabelFromCard(card, labelText) {
+        const labelEls = Array.from(card.querySelectorAll('small strong'));
+        const labelEl = labelEls.find(el => el.textContent.trim().startsWith(labelText));
+        if (labelEl) {
+          const nextDiv = labelEl.parentElement.nextElementSibling;
+          return nextDiv ? nextDiv.textContent.trim() : '';
+        }
+        return '';
+      }
+
+      // Handle sale card selection
+      saleCards.forEach(card => {
+        card.addEventListener('click', function(e) {
+          // Avoid selecting when clicking a control inside the card (if any)
+          if (e.target && (e.target.matches('button') || e.target.matches('input') || e.target.closest('button'))) {
+            return;
+          }
+
+          saleCards.forEach(c => c.classList.remove('selected'));
+          this.classList.add('selected');
+
+          try {
+            const saleData = JSON.parse(this.dataset.saleData);
+            saleIdInput.value = saleData._id;
+            selectedSaleName.textContent = `${saleData.saleId} - ${saleData.customerName}`;
+            selectedSaleInfo.classList.add('show');
+          } catch (err) {
+            console.warn('Failed to parse sale data for selection', err);
+          }
+
+          // Clear form inputs and messages
+          document.getElementById('vehicleNumber').value = '';
+          document.getElementById('driverName').value = '';
+          formError.style.display = 'none';
+          formSuccess.style.display = 'none';
+        });
+      });
+
+      // Handle form submission (generate gatepass)
+      if (gatepassForm) {
+        gatepassForm.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          formError.style.display = 'none';
+          formSuccess.style.display = 'none';
+
+          const saleId = saleIdInput.value;
+          const vehicleNumber = document.getElementById('vehicleNumber').value.trim();
+          const driverName = document.getElementById('driverName').value.trim();
+
+          if (!saleId) {
+            formError.textContent = 'Please select a sale first';
+            formError.style.display = 'block';
+            return;
+          }
+
+          if (!vehicleNumber) {
+            formError.textContent = 'Vehicle number is required';
+            formError.style.display = 'block';
+            return;
+          }
+
+          try {
+            generateBtn.disabled = true;
+            generateBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Generating...';
+
+            const response = await fetch('/gatepass', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ saleId, vehicleNumber, driverName })
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+              throw new Error(data.error || 'Failed to create gatepass');
+            }
+
+            formSuccess.textContent = `✓ ${data.message}`;
+            formSuccess.style.display = 'block';
+            
+            // Reload page after short delay to show generated gatepass
+            setTimeout(() => location.reload(), 1200);
+          } catch (err) {
+            formError.textContent = err.message;
+            formError.style.display = 'block';
+          } finally {
+            generateBtn.disabled = false;
+            generateBtn.innerHTML = '<i class="fas fa-file-circle-plus me-2"></i>Generate Gatepass';
+          }
+        });
+      }
+
+      // Reset handler
+      if (resetBtn) {
+        resetBtn.addEventListener('click', () => {
+          saleCards.forEach(c => c.classList.remove('selected'));
+          if (saleIdInput) saleIdInput.value = '';
+          selectedSaleInfo.classList.remove('show');
+          formError.style.display = 'none';
+          formSuccess.style.display = 'none';
+        });
+      }
+
+      // Single card print handler (buttons added in markup with class single-print-btn)
+      document.querySelectorAll('.single-print-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const gatepassId = btn.getAttribute('data-gatepass-id');
+          printGatepassSingle(gatepassId);
+        });
+      });
+
+      // Multi-print handler (Print Selected)
+      const printSelectedBtn = document.getElementById('printSelectedBtn');
+      if (printSelectedBtn) {
+        printSelectedBtn.addEventListener('click', () => {
+          const selectedBoxes = Array.from(document.querySelectorAll('.gatepass-select:checked'));
+
+          if (selectedBoxes.length === 0) {
+            alert('Please select at least one gatepass to print.');
+            return;
+          }
+
+          if (selectedBoxes.length > 6) {
+            alert('You can print a maximum of 6 gatepasses at once.');
+            return;
+          }
+
+          // Build HTML content for the print window
+          let htmlContent = '';
+          selectedBoxes.forEach((checkbox) => {
+            const card = checkbox.closest('.generated-card');
+            if (!card) return;
+
+            const gatepassIdText = card.querySelector('.gatepass-id')?.textContent.trim() || '';
+            // Use labeled value divs to extract data reliably
+            const saleId = card.querySelector('.sale-id-value')?.textContent.trim() || '';
+            const date = card.querySelector('.date-value')?.textContent.trim() || '';
+            const customer = card.querySelector('.customer-value')?.textContent.trim() || '';
+            const vehicle = card.querySelector('.vehicle-value')?.textContent.trim() || '';
+            const driver = card.querySelector('.driver-value')?.textContent.trim() || '';
+
+            const products = [];
+            card.querySelectorAll('.generated-products .product-item').forEach(item => {
+              const name = item.querySelector('.product-name')?.textContent.trim() || '';
+              const qty = item.querySelector('.product-qty')?.textContent.trim() || '';
+              products.push({ name, qty });
+            });
+
+            htmlContent += `
+              <div class="gatepass-card">
+                <div class="header">GATEPASS</div>
+                <div class="info">
+                  <label>ID:</label> ${escapeHtml(gatepassIdText)}<br>
+                  <label>Sale ID:</label> ${escapeHtml(saleId)}<br>
+                  <label>Date:</label> ${escapeHtml(date)}<br>
+                  <label>Customer:</label> ${escapeHtml(customer)}<br>
+                  <label>Vehicle:</label> ${escapeHtml(vehicle)}<br>
+                  ${driver ? `<label>Driver:</label> ${escapeHtml(driver)}<br>` : ''}
+                </div>
+                <table>
+                  <thead><tr><th>Product</th><th>Qty</th></tr></thead>
+                  <tbody>
+                    ${products.map(p => `<tr><td>${escapeHtml(p.name)}</td><td>${escapeHtml(p.qty)}</td></tr>`).join('')}
+                  </tbody>
+                </table>
+                <div class="footer">Signature: ___________________</div>
+              </div>
+            `;
+          });
+
+          // Open print window and write content
+          const printWindow = window.open('', '_blank');
+          printWindow.document.write(`
+            <html>
+            <head>
+              <title>Print Gatepasses</title>
+              <style>
+                @page { size: A4; margin: 10mm; }
+                body {
+                  font-family: 'Segoe UI', Tahoma, sans-serif;
+                  padding: 20px;
+                  background: #f4f6f9;
+                }
+                .page { display: flex; flex-wrap: wrap; justify-content: space-between; }
+                .gatepass-card {
+                  width: 48%;
+                  background: #ffffff;
+                  border: 1px solid #d0d7de;
+                  border-radius: 10px;
+                  padding: 10px 12px;
+                  margin-bottom: 12px;
+                  box-sizing: border-box;
+                  page-break-inside: avoid;
+                }
+                .header {
+                  text-align: center;
+                  border-bottom: 2px solid #007bff;
+                  color: #007bff;
+                  font-weight: 700;
+                  margin-bottom: 8px;
+                  padding-bottom: 4px;
+                  font-size: 14px;
+                }
+                .info { line-height: 1.5; font-size: 11px; }
+                .info label { font-weight: 600; display: inline-block; width: 80px; color: #333; }
+                table { width: 100%; border-collapse: collapse; margin-top: 5px; font-size: 10px; }
+                th, td { border: 1px solid #ccc; padding: 3px 5px; text-align: left; }
+                th { background: #007bff; color: #fff; }
+                .footer { text-align: right; font-size: 10px; color: #555; margin-top: 6px; }
+                .no-print { text-align: center; margin-top: 20px; }
+                .print-btn { background: #007bff; color: white; padding: 6px 12px; border-radius: 4px; border: none; }
+                .close-btn { background: #dc3545; color: white; padding: 6px 12px; border-radius: 4px; border: none; }
+                @media print { .no-print { display: none; } }
+              </style>
+            </head>
+            <body>
+              <div class="page">
+                ${htmlContent}
+              </div>
+              <div class="no-print">
+                <h4>🖨️ Print Preview Controls</h4>
+                <button class="print-btn" onclick="window.print()">Print Now</button>
+                <button class="close-btn" onclick="window.close()">Close</button>
+              </div>
+            </body>
+            </html>
+          `);
+          printWindow.document.close();
+
+          // wait until the content is loaded, then trigger print
+          printWindow.onload = function() {
+            // some browsers require a small delay
+            setTimeout(() => {
+              printWindow.focus();
+              printWindow.print();
+            }, 250);
+          };
+        });
+      }
+
+      // Helper: single gatepass print uses same layout but only for one card
+      function printGatepassSingle(gatepassId) {
+        // Find the checkbox with this gatepassId or the card with data attribute
+        const card = document.querySelector(`.generated-card[data-gatepass-id="${gatepassId}"]`) ||
+                     document.querySelector(`#select-${gatepassId}`)?.closest('.generated-card');
+
+        if (!card) {
+          alert('Gatepass not found for printing');
+          return;
+        }
+
+        const gatepassIdText = card.querySelector('.gatepass-id')?.textContent.trim() || '';
+        const saleId = card.querySelector('.sale-id-value')?.textContent.trim() || '';
+        const date = card.querySelector('.date-value')?.textContent.trim() || '';
+        const customer = card.querySelector('.customer-value')?.textContent.trim() || '';
+        const vehicle = card.querySelector('.vehicle-value')?.textContent.trim() || '';
+        const driver = card.querySelector('.driver-value')?.textContent.trim() || '';
+
+        const products = [];
+        card.querySelectorAll('.generated-products .product-item').forEach(item => {
+          const name = item.querySelector('.product-name')?.textContent.trim() || '';
+          const qty = item.querySelector('.product-qty')?.textContent.trim() || '';
+          products.push({ name, qty });
+        });
+
+        const printWindow = window.open('', '_blank');
+        printWindow.document.write(`
+          <html>
+          <head>
+            <title>Gatepass Print</title>
+            <style>
+              @page { size: A4; margin: 10mm; }
+              body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #f4f6f9; margin: 0; padding: 20px; }
+              .page { display: flex; flex-wrap: wrap; justify-content: space-between; }
+              .gatepass-card {
+                width: 48%;
+                background: #ffffff;
+                border: 1px solid #d0d7de;
+                border-radius: 10px;
+                padding: 10px 12px;
+                margin-bottom: 12px;
+                box-sizing: border-box;
+                page-break-inside: avoid;
+              }
+              .header { text-align: center; border-bottom: 2px solid #007bff; color: #007bff; font-weight: 700; margin-bottom: 8px; padding-bottom: 4px; font-size: 14px; }
+              .info { line-height: 1.5; font-size: 11px; }
+              .info label { font-weight: 600; display: inline-block; width: 80px; color: #333; }
+              table { width: 100%; border-collapse: collapse; margin-top: 5px; font-size: 10px; }
+              th, td { border: 1px solid #ccc; padding: 3px 5px; text-align: left; }
+              th { background-color: #007bff; color: white; }
+              .footer { text-align: right; font-size: 10px; color: #555; margin-top: 4px; }
+              .no-print { margin-top: 20px; text-align: center; }
+              .print-btn { background: #007bff; color: white; padding: 6px 12px; border-radius: 4px; border: none; }
+              .close-btn { background: #dc3545; color: white; padding: 6px 12px; border-radius: 4px; border: none; }
+              @media print { .no-print { display: none; } }
+            </style>
+          </head>
+          <body>
+            <div class="page">
+              <div class="gatepass-card">
+                <div class="header">GATEPASS</div>
+                <div class="info">
+                  <label>ID:</label> ${escapeHtml(gatepassIdText)}<br>
+                  <label>Sale ID:</label> ${escapeHtml(saleId)}<br>
+                  <label>Date:</label> ${escapeHtml(date)}<br>
+                  <label>Customer:</label> ${escapeHtml(customer)}<br>
+                  <label>Vehicle:</label> ${escapeHtml(vehicle)}<br>
+                  ${driver ? `<label>Driver:</label> ${escapeHtml(driver)}<br>` : ''}
+                </div>
+                <table>
+                  <thead><tr><th>Product</th><th>Qty</th></tr></thead>
+                  <tbody>
+                    ${products.map(p => `<tr><td>${escapeHtml(p.name)}</td><td>${escapeHtml(p.qty)}</td></tr>`).join('')}
+                  </tbody>
+                </table>
+                <div class="footer">Signature: ___________________</div>
+              </div>
+            </div>
+
+            <div class="no-print">
+              <h4>🖨️ Print Preview Controls</h4>
+              <button class="print-btn" onclick="window.print()">Print Now</button>
+              <button class="close-btn" onclick="window.close()">Close</button>
+            </div>
+          </body>
+          </html>
+        `);
+        printWindow.document.close();
+
+        printWindow.onload = function() {
+          setTimeout(() => {
+            printWindow.focus();
+            printWindow.print();
+          }, 200);
+        };
+      }
+
+      // small helper to escape user content for injecting into print window
+      function escapeHtml(unsafe) {
+        if (!unsafe) return '';
+        return String(unsafe)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#039;');
+      }
+    }); // DOMContentLoaded
+  </script>
+</body>
+</html>

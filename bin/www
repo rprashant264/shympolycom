@@ -7,6 +7,9 @@
 const { connectDB } = require('../config/database');
 var debug = require('debug')('myapp:server');
 var http = require('http');
+// declare port and server in module scope so handlers below can access them
+var port;
+var server;
 
 /**
  * Start the server after DB connection is established.
@@ -20,12 +23,12 @@ var http = require('http');
     // Require the app after DB connection so mongoose.connection is ready
     var app = require('../app');
 
-    // Get port from environment and store in Express.
-    var port = normalizePort(process.env.PORT || '3000');
-    app.set('port', port);
+  // Get port from environment and store in Express.
+  port = normalizePort(process.env.PORT || '3000');
+  app.set('port', port);
 
-    // Create HTTP server.
-    var server = http.createServer(app);
+  // Create HTTP server.
+  server = http.createServer(app);
 
     // Listen on provided port, on all network interfaces.
     server.listen(port);

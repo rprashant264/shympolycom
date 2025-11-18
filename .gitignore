@@ -81,6 +81,13 @@ public/images/uploads/*
 # Local MongoDB data
 /data/db/
 
+
 # Vercel
 .vercel
 .now
+
+# Ignore local config and runtime entry files
+# Keep paths anchored to repository root
+/config/database.js
+/bin/www
+/app.js
