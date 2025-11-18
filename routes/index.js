@@ -1381,6 +1381,187 @@ router.get('/sales/:id', isLoggedIn, async (req, res) => {
     }
   });
 
+
+// ============================
+// GATEPASS ROUTES
+// ============================
+
+// DEBUG: Get raw sales data
+router.get('/api/gatepass/debug', isLoggedIn, async (req, res, next) => {
+  try {
+    const sales = await Sale.find()
+      .populate('lineItems.productRef')
+      .sort({ date: -1 })
+      .limit(5)
+      .lean();
+
+    const gatepasses = await Gatepass.find().lean();
+
+    res.json({
+      totalSales: await Sale.countDocuments(),
+      totalGatepasses: await Gatepass.countDocuments(),
+      sampleSales: sales.map(s => ({
+        _id: s._id,
+        saleId: s.saleId,
+        lineItems: (s.lineItems || []).map(item => ({
+          productName: item.productName,
+          units: item.units,
+          productRef: item.productRef ? {
+            _id: item.productRef._id,
+            productName: item.productRef.productName
+          } : null
+        }))
+      })),
+      sampleGatepasses: gatepasses.slice(0, 3)
+    });
+  } catch (err) {
+    console.error('Error in debug endpoint:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET gatepass page - show pending and generated gatepasses
+router.get('/gatepass', isLoggedIn, async (req, res, next) => {
+  try {
+    console.log('=== GET /gatepass START ===');
+
+    // Get all sales - populate ALL product fields
+    const sales = await Sale.find()
+      .populate('lineItems.productRef')  // No select restriction - get all fields
+      .sort({ date: -1 })
+      .lean();
+
+    console.log(`Found ${sales.length} sales`);
+
+    // Get all generated gatepasses
+    const gatepasses = await Gatepass.find().lean();
+    console.log(`Found ${gatepasses.length} gatepasses`);
+
+    // Create a map of sale IDs to gatepasses
+    const gatepassMap = {};
+    gatepasses.forEach(gp => {
+      gatepassMap[String(gp.saleRef)] = gp;
+    });
+
+    // Separate sales into pending and generated
+    const pendingSales = [];
+    const generatedSales = [];
+
+    sales.forEach(sale => {
+      // Extract products from sale lineItems
+      const products = (sale.lineItems || []).map(item => ({
+        productName: (item.productRef && item.productRef.productName) || item.productName || 'Unknown Product',
+        quantity: item.units || 0
+      }));
+
+      const saleData = {
+        _id: sale._id,
+        saleId: sale.saleId || '',
+        customerName: sale.customerName || '',
+        date: sale.date ? new Date(sale.date).toISOString().slice(0, 10) : '',
+        products: products
+      };
+
+      const saleIdString = String(sale._id);
+      if (gatepassMap[saleIdString]) {
+        generatedSales.push({ ...saleData, gatepass: gatepassMap[saleIdString] });
+      } else {
+        pendingSales.push(saleData);
+      }
+    });
+
+    console.log(`Separated: ${pendingSales.length} pending, ${generatedSales.length} generated`);
+    
+    // Debug output
+    if (pendingSales.length > 0) {
+      console.log('DEBUG: First pending sale:', JSON.stringify(pendingSales[0], null, 2));
+    }
+    if (generatedSales.length > 0) {
+      console.log('DEBUG: First generated sale:', JSON.stringify(generatedSales[0], null, 2));
+    }
+
+    console.log('=== GET /gatepass END ===');
+
+    res.render('gatepass', { pendingSales, generatedSales, errors: null });
+  } catch (err) {
+    console.error('Error loading gatepass page:', err);
+    next(err);
+  }
+});
+
+// POST create gatepass
+router.post('/gatepass', isLoggedIn, async (req, res, next) => {
+  try {
+    const { saleId, vehicleNumber, driverName } = req.body;
+
+    if (!saleId) {
+      return res.status(400).json({ error: 'Sale selection is required' });
+    }
+    if (!vehicleNumber) {
+      return res.status(400).json({ error: 'Vehicle number is required' });
+    }
+
+    // Check if sale exists
+    const sale = await Sale.findById(saleId)
+      .populate('lineItems.productRef')
+      .lean();
+
+    if (!sale) {
+      return res.status(404).json({ error: 'Sale not found' });
+    }
+
+    // Check if gatepass already exists for this sale
+    const existingGatepass = await Gatepass.findOne({ saleRef: saleId }).lean();
+    if (existingGatepass) {
+      return res.status(400).json({ error: 'Gatepass already exists for this sale' });
+    }
+
+    // Build product snapshot with only name and quantity
+    const products = (sale.lineItems || []).map(item => ({
+      productName: (item.productRef && item.productRef.productName) || item.productName || 'Unknown Product',
+      quantity: item.units || 0
+    }));
+
+    console.log('DEBUG: Products to save:', JSON.stringify(products, null, 2));
+
+    if (products.length === 0) {
+      return res.status(400).json({ error: 'Sale has no products' });
+    }
+
+    // Generate gatepass ID
+    const count = await Gatepass.countDocuments();
+    const gatepassId = `GP${String(count + 1).padStart(4, '0')}`;
+
+    // Create gatepass
+    const gatepass = new Gatepass({
+      gatepassId,
+      saleRef: saleId,
+      vehicleNumber: vehicleNumber.trim(),
+      driverName: driverName ? driverName.trim() : '',
+      products,
+      createdBy: req.user ? req.user.username : 'system'
+    });
+
+    console.log('DEBUG: Gatepass before save:', JSON.stringify(gatepass, null, 2));
+
+    await gatepass.save();
+
+    console.log('DEBUG: Gatepass after save:', JSON.stringify(gatepass, null, 2));
+
+    res.json({
+      success: true,
+      message: `Gatepass ${gatepassId} created successfully`,
+      gatepass: gatepass
+    });
+  } catch (err) {
+    console.error('Error creating gatepass:', err);
+    if (err.code === 11000) {
+      return res.status(400).json({ error: 'Gatepass already exists for this sale' });
+    }
+    res.status(500).json({ error: err.message || 'Failed to create gatepass' });
+  }
+});
+
 // Auth middleware
 function isLoggedIn(req, res, next) {
   console.log('=== isLoggedIn Middleware ===');
