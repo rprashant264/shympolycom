@@ -583,11 +583,6 @@ router.put('/purchases/:id', isLoggedIn, async (req, res) => {
     res.status(500).json({ error: err.message || 'Failed to update purchase' });
   }
 });
-
-
-
-
-
 // Delete purchase
 router.delete('/purchases/:id', isLoggedIn, async (req, res, next) => {
   try {
