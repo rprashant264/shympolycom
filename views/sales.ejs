@@ -226,7 +226,13 @@
                 const opt = e.target.selectedOptions[0];
                 if (opt && opt.value) {
                     salePrice.value = opt.dataset.price || '';
-                    saleWeightInput.value = opt.dataset.weight || '';
+                    const category = opt.dataset.category || '';
+                    // Show weight only for Glass and MS Casting, show Nil for Other disposables
+                    if (category === 'Glass' || category === 'MS Casting') {
+                        saleWeightInput.value = opt.dataset.weight || '';
+                    } else {
+                        saleWeightInput.value = 'Nil';
+                    }
                 } else {
                     salePrice.value = '';
                     saleWeightInput.value = '';
@@ -236,6 +242,14 @@
             // Add product to line items
             addProductBtn.addEventListener('click', (e) => {
                 e.preventDefault();
+                
+                // Check if customer is selected
+                const customerId = saleCustomerId.value;
+                if (!customerId) {
+                    alert('Please select a customer first');
+                    return;
+                }
+                
                 const productOpt = saleProductSelect.selectedOptions[0];
                 if (!productOpt || !productOpt.value) {
                     alert('Please select a product');
@@ -243,10 +257,14 @@
                 }
                 const qty = parseInt(saleQty.value) || 0;
                 const price = parseFloat(salePrice.value) || 0;
+                const category = productOpt.dataset.category || '';
                 const weight = parseFloat(productOpt.dataset.weight) || 1;
                 
                 if (qty <= 0) { alert('Quantity must be > 0'); return; }
                 if (price < 0) { alert('Price cannot be negative'); return; }
+
+                // Only apply weight for Glass and MS Casting categories
+                const weightMultiplier = (category === 'Glass' || category === 'MS Casting') ? weight : 1;
 
                 const lineItem = {
                     productRef: productOpt.value,
@@ -255,11 +273,14 @@
                     units: qty,
                     price: price,
                     productWeight: weight,
-                    amount: qty * price * weight
+                    category: category,
+                    amount: qty * price * weightMultiplier
                 };
 
                 lineItems.push(lineItem);
                 renderLineItems();
+                // Disable customer selection after adding a product
+                saleCustomerSelect.disabled = true;
                 saleProductSelect.value = '';
                 saleQty.value = '1';
                 salePrice.value = '';
@@ -281,14 +302,20 @@
                     lineItems.forEach((item, idx) => {
                         totalAmount += item.amount;
                         totalUnits += item.units;
-                        totalWeight += (item.productWeight || 0) * (item.units || 0);
+                        // Only add to total weight if category is Glass or MS Casting
+                        const isWeightable = (item.category === 'Glass' || item.category === 'MS Casting');
+                        if (isWeightable) {
+                            totalWeight += (item.productWeight || 0) * (item.units || 0);
+                        }
                         const row = document.createElement('tr');
+                        const weightDisplay = isWeightable ? `${(item.productWeight || 0).toFixed(3)} kg` : 'Nil';
+                        const totalWeightDisplay = isWeightable ? `${((item.productWeight || 0) * item.units).toFixed(3)} kg` : 'Nil';
                         row.innerHTML = `
                             <td>${item.productName}</td>
                             <td>${item.hsnCode}</td>
                             <td>${item.units}</td>
-                            <td>${(item.productWeight || 0).toFixed(3)} kg</td>
-                            <td>${((item.productWeight || 0) * item.units).toFixed(3)} kg</td>
+                            <td>${weightDisplay}</td>
+                            <td>${totalWeightDisplay}</td>
                             <td>₹${Number(item.price).toFixed(2)}</td>
                             <td>₹${Number(item.amount).toFixed(2)}</td>
                             <td><button type="button" class="btn btn-sm btn-outline-danger btn-remove-item" data-idx="${idx}"><i class="fas fa-trash"></i></button></td>
@@ -345,7 +372,7 @@
                     const [pRes, cRes] = await Promise.all([fetch('/api/products'), fetch('/api/customers')]);
                     if (pRes.ok) {
                         const products = await pRes.json();
-                        saleProductSelect.innerHTML = '<option value="">-- Select product --</option>' + products.map(p => `<option value="${p._id}" data-hsn="${p.hsnCode || ''}" data-price="${p.sellingPrice || p.cost || 0}" data-weight="${p.productWeight || 0}">${p.productName} (${p.hsnCode || ''})</option>`).join('');
+                        saleProductSelect.innerHTML = '<option value="">-- Select product --</option>' + products.map(p => `<option value="${p._id}" data-hsn="${p.hsnCode || ''}" data-price="${p.sellingPrice || p.cost || 0}" data-weight="${p.productWeight || 0}" data-category="${p.category || ''}">${p.productName} (${p.hsnCode || ''})</option>`).join('');
                     }
                     if (cRes.ok) {
                         const customers = await cRes.json();
@@ -373,6 +400,10 @@
             saleCustomerSelect.addEventListener('change', (e) => {
                 const opt = e.target.selectedOptions[0];
                 saleCustomerId.value = opt && opt.value ? opt.value : '';
+                // Disable customer select based on whether products are added, but allow changes during editing
+                if (!editingSaleId && lineItems.length > 0 && saleCustomerId.value) {
+                    saleCustomerSelect.disabled = true;
+                }
             });
 
             // New Sale button
@@ -381,6 +412,11 @@
                     editingSaleId = null;
                     lineItems = [];
                     addSaleForm.reset();
+                    // Enable customer select for new sale
+                    saleCustomerSelect.disabled = false;
+                    // Set default date to today
+                    const today = new Date().toISOString().split('T')[0];
+                    addSaleForm.querySelector('input[name="date"]').value = today;
                     const modal = new bootstrap.Modal(addSaleModalEl);
                     modal.show();
                 });
@@ -409,8 +445,13 @@
                     lineItems
                 };
 
+                console.log('Form submission data:', data);
+                console.log('Current lineItems:', lineItems);
+                console.log('Selected customerId:', customerId);
+
                 try {
                     if (editingSaleId) {
+                        console.log('Updating sale with customerId:', customerId);
                         const res = await fetch(`/sales/${editingSaleId}`, {
                             method: 'PUT',
                             headers: { 'Content-Type': 'application/json' },
@@ -420,7 +461,8 @@
                             const err = await res.json();
                             throw new Error(err.error || 'Failed to update sale');
                         }
-                        location.reload();
+                        console.log('Sale updated successfully, reloading...');
+                        setTimeout(() => location.reload(), 500);
                         return;
                     }
 
@@ -433,7 +475,8 @@
                         const err = await res.json();
                         throw new Error(err.error || 'Failed to create sale');
                     }
-                    location.reload();
+                    console.log('Sale created successfully, reloading...');
+                    setTimeout(() => location.reload(), 500);
                 } catch (err) {
                     addSaleError.textContent = err.message;
                     addSaleError.classList.remove('d-none');
@@ -469,6 +512,9 @@
                         if (!res.ok) throw new Error('Failed to load sale');
                         const sale = await res.json();
                         
+                        console.log('Sale data:', sale);
+                        console.log('Customer ID:', sale.customerId);
+                        
                         // Populate line items
                         lineItems = (sale.lineItems || []).map(item => ({
                             productRef: item.productRef && item.productRef._id ? item.productRef._id : item.productRef,
@@ -477,6 +523,7 @@
                             units: item.units,
                             price: item.price,
                             productWeight: item.productWeight || 0,
+                            category: item.category || '',
                             amount: item.amount
                         }));
                         
@@ -484,19 +531,27 @@
                         const [pRes, cRes] = await Promise.all([fetch('/api/products'), fetch('/api/customers')]);
                         if (pRes.ok) {
                             const products = await pRes.json();
-                            saleProductSelect.innerHTML = '<option value="">-- Select product --</option>' + products.map(p => `<option value="${p._id}" data-hsn="${p.hsnCode || ''}" data-price="${p.sellingPrice || p.cost || 0}" data-weight="${p.productWeight || 0}">${p.productName} (${p.hsnCode || ''})</option>`).join('');
+                            saleProductSelect.innerHTML = '<option value="">-- Select product --</option>' + products.map(p => `<option value="${p._id}" data-hsn="${p.hsnCode || ''}" data-price="${p.sellingPrice || p.cost || 0}" data-weight="${p.productWeight || 0}" data-category="${p.category || ''}">${p.productName} (${p.hsnCode || ''})</option>`).join('');
                         }
                         if (cRes.ok) {
                             const customers = await cRes.json();
                             saleCustomerSelect.innerHTML = '<option value="">-- Select customer --</option>' + customers.map(c => `<option value="${c._id}">${c.name}</option>`).join('');
+                            
+                            // Set customer after dropdown is populated - use customerDbId which has the MongoDB _id
+                            const custValue = sale.customerDbId || (sale.customerId && sale.customerId._id ? sale.customerId._id : sale.customerId);
+                            console.log('Customer value to set:', custValue);
+                            console.log('Available options:', Array.from(saleCustomerSelect.options).map(o => ({ value: o.value, text: o.text })));
+                            
+                            if (custValue && saleCustomerSelect.querySelector(`option[value="${custValue}"]`)) {
+                                saleCustomerSelect.value = custValue;
+                                saleCustomerId.value = custValue;
+                                console.log('Customer selected:', custValue);
+                            } else {
+                                console.log('Customer option not found or custValue is empty');
+                            }
                         }
 
                         // Set form values
-                        const custValue = sale.customerId && sale.customerId._id ? sale.customerId._id : sale.customerId;
-                        if (saleCustomerSelect.querySelector(`option[value="${custValue}"]`)) {
-                            saleCustomerSelect.value = custValue;
-                            saleCustomerId.value = custValue;
-                        }
                         const dateField = addSaleForm.querySelector('input[name="date"]');
                         if (dateField && sale.date) {
                             dateField.value = sale.date.split('T')[0];
@@ -522,10 +577,27 @@
                         if (!res.ok) throw new Error('Failed to load sale');
                         const sale = await res.json();
 
+                        // Fetch products to get category information
+                        const productsRes = await fetch('/api/products');
+                        const products = productsRes.ok ? await productsRes.json() : [];
+                        const productMap = {};
+                        products.forEach(p => {
+                            productMap[String(p._id)] = p;
+                        });
+
                         // compute totals if not provided
                         const computedTotalAmount = (sale.totalAmount !== undefined) ? sale.totalAmount : (sale.lineItems || []).reduce((acc, it) => acc + (it.amount || (it.units * (it.price || 0)*i(t.weight || 1))), 0);
                         const computedTotalUnits = (sale.totalUnits !== undefined) ? sale.totalUnits : (sale.lineItems || []).reduce((acc, it) => acc + (it.units || 0), 0);
-                        const computedTotalWeight = (sale.lineItems || []).reduce((acc, it) => acc + ((it.productWeight || 0) * (it.units || 0)), 0);
+                        
+                        // Compute total weight only for Glass and MS Casting
+                        let computedTotalWeight = 0;
+                        (sale.lineItems || []).forEach(item => {
+                            const product = productMap[String(item.productRef?._id || item.productRef)];
+                            const category = product?.category || item.category || '';
+                            if (category === 'Glass' || category === 'MS Casting') {
+                                computedTotalWeight += (item.productWeight || 0) * (item.units || 0);
+                            }
+                        });
 
                         // Generate printable invoice HTML
                         const printWindow = window.open('', '_blank');
@@ -646,17 +718,24 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                ${(sale.lineItems || []).map((item, i) => `
+                                ${(sale.lineItems || []).map((item, i) => {
+                                    const product = productMap[String(item.productRef?._id || item.productRef)];
+                                    const category = product?.category || item.category || '';
+                                    const isWeightable = (category === 'Glass' || category === 'MS Casting');
+                                    const weightDisplay = isWeightable ? (item.productWeight || 0).toFixed(3) : 'Nil';
+                                    const totalWeightDisplay = isWeightable ? (((item.productWeight || 0) * (item.units || 0))).toFixed(3) : 'Nil';
+                                    return `
                                     <tr>
                                         <td>${i + 1}</td>
                                         <td>${item.productName || ''}</td>
                                         <td>${item.units || ''}</td>
-                                        <td>${(item.productWeight || 0).toFixed(3)}</td>
-                                        <td>${(((item.productWeight || 0) * (item.units || 0))).toFixed(3)}</td>
+                                        <td>${weightDisplay}</td>
+                                        <td>${totalWeightDisplay}</td>
                                         <td>${(item.price !== undefined) ? Number(item.price).toFixed(2) : ''}</td>
                                         <td>${(item.amount !== undefined) ? Number(item.amount).toFixed(2) : ''}</td>
                                     </tr>
-                                `).join('')}
+                                `;
+                                }).join('')}
                             </tbody>
                         </table>
 
