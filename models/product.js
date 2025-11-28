@@ -12,6 +12,14 @@ const productSchema = new mongoose.Schema({
     },
     productWeight: {
         type: Number,
+        required: function() {
+            return this.category !== 'Other disposables';
+        }
+    },
+    category: {
+        type: String,
+        enum: ['Glass', 'MS Casting', 'Other disposables'],
+        default: 'Glass',
         required: true
     },
     cost: {
