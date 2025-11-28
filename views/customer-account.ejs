@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= customer.name %> - Customer Account</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        body {
+            background-color: #f8f9fa;
+        }
+        .account-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 2rem;
+            border-radius: 8px;
+            margin-bottom: 2rem;
+        }
+        .stat-card {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 1rem;
+            border-left: 4px solid #667eea;
+        }
+        .stat-card h6 {
+            color: #666;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+        .stat-card .number {
+            font-size: 1.8rem;
+            font-weight: bold;
+            color: #667eea;
+        }
+        .section-title {
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin: 2rem 0 1rem 0;
+            color: #333;
+        }
+        .table-container {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 2rem;
+        }
+        .table {
+            margin-bottom: 0;
+        }
+        .table thead {
+            background-color: #f8f9fa;
+            font-weight: 600;
+        }
+        .back-btn {
+            margin-bottom: 1rem;
+        }
+        .payment-status {
+            display: inline-block;
+            padding: 0.4rem 0.8rem;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+        .payment-unpaid {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .payment-partial {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+        .payment-paid {
+            background-color: #d4edda;
+            color: #155724;
+        }
+    </style>
+</head>
+<body>
+    <%- include('partials/nav', { current: 'customers' }) %>
+
+    <div class="container mt-4">
+        <a href="/customers" class="btn btn-outline-secondary btn-sm back-btn">
+            <i class="fas fa-arrow-left me-1"></i>Back to Customers
+        </a>
+
+        <!-- Customer Header -->
+        <div class="account-header">
+            <div class="row">
+                <div class="col-md-8">
+                    <h2><%= customer.name %></h2>
+                    <p class="mb-2"><strong>Customer ID:</strong> <%= customer.custId %></p>
+                    <p class="mb-2"><strong>Email:</strong> <%= customer.email %></p>
+                    <% if (customer.phone) { %>
+                        <p class="mb-2"><strong>Phone:</strong> <%= customer.phone %></p>
+                    <% } %>
+                    <p class="mb-0"><strong>Address:</strong> <%= customer.address %></p>
+                </div>
+                <div class="col-md-4 text-end">
+                    <div style="font-size: 2.5rem; opacity: 0.3;">
+                        <i class="fas fa-user-circle"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Statistics Row -->
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="stat-card">
+                    <h6>Total Orders</h6>
+                    <div class="number"><%= totalSales %></div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stat-card">
+                    <h6>Total Amount Ordered</h6>
+                    <div class="number">₹<%= Number(totalAmount).toFixed(0) %></div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stat-card">
+                    <h6>Total Units</h6>
+                    <div class="number"><%= totalUnits %></div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stat-card">
+                    <h6>Products Ordered</h6>
+                    <div class="number"><%= productsOrdered.length %></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Payment Insights Row -->
+        <div class="row mb-4">
+            <div class="col-md-4">
+                <div class="stat-card" style="border-left-color: #667eea;">
+                    <h6>Total Ordered</h6>
+                    <div class="number" style="color: #667eea;">₹<%= Number(totalAmount).toFixed(2) %></div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="stat-card" style="border-left-color: #28a745;">
+                    <h6>Total Paid</h6>
+                    <div class="number" style="color: #28a745;">₹<%= Number(totalPaid).toFixed(2) %></div>
+                    <small class="text-muted"><%= Number((totalPaid / totalAmount * 100) || 0).toFixed(1) %>% paid</small>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="stat-card" style="border-left-color: #dc3545;">
+                    <h6>Amount Remaining</h6>
+                    <div class="number" style="color: #dc3545;">₹<%= Number(totalRemaining).toFixed(2) %></div>
+                    <small class="text-muted"><%= Number((totalRemaining / totalAmount * 100) || 0).toFixed(1) %>% pending</small>
+                </div>
+            </div>
+        </div>
+
+        <!-- Products Ordered Section -->
+        <div class="section-title">Products Ordered</div>
+        <div class="table-container">
+            <% if (productsOrdered.length > 0) { %>
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Product Name</th>
+                            <th>HSN Code</th>
+                            <th>Total Units</th>
+                            <th>Total Orders</th>
+                            <th>Total Amount</th>
+                            <th>Avg per Order</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% productsOrdered.forEach(product => { %>
+                            <tr>
+                                <td><%= product.productName %></td>
+                                <td><%= product.hsnCode %></td>
+                                <td><%= product.totalUnits %></td>
+                                <td><%= product.orders %></td>
+                                <td>₹<%= Number(product.totalAmount).toFixed(2) %></td>
+                                <td>₹<%= Number(product.totalAmount / product.orders).toFixed(2) %></td>
+                            </tr>
+                        <% }); %>
+                    </tbody>
+                </table>
+            <% } else { %>
+                <p class="text-muted text-center py-4">No products ordered yet</p>
+            <% } %>
+        </div>
+
+        <!-- Sales History Section -->
+        <div class="section-title">Sales History</div>
+        <div class="table-container">
+            <% if (sales.length > 0) { %>
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Sale ID</th>
+                            <th>Date</th>
+                            <th>Products</th>
+                            <th>Total Units</th>
+                            <th>Amount</th>
+                            <th>Payment Status</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% sales.forEach(sale => { 
+                            const paymentStatus = sale.paymentStatus || 'unpaid';
+                            const statusLabel = paymentStatus === 'paid' ? 'Fully Paid' : (paymentStatus === 'partial' ? 'Partially Paid' : 'Unpaid');
+                            const statusClass = `payment-${paymentStatus}`;
+                        %>
+                            <tr>
+                                <td><strong><%= sale.saleId %></strong></td>
+                                <td><%= sale.date ? new Date(sale.date).toLocaleDateString() : '-' %></td>
+                                <td>
+                                    <% if (sale.lineItems && sale.lineItems.length) { %>
+                                        <ul style="list-style: none; padding: 0; margin: 0;">
+                                            <% sale.lineItems.forEach(item => { %>
+                                                <li><small><%= item.productName %> × <%= item.units %></small></li>
+                                            <% }); %>
+                                        </ul>
+                                    <% } else { %>
+                                        <small class="text-muted">No items</small>
+                                    <% } %>
+                                </td>
+                                <td><%= sale.totalUnits %></td>
+                                <td><strong>₹<%= Number(sale.totalAmount).toFixed(2) %></strong></td>
+                                <td>
+                                    <span class="payment-status <%= statusClass %>"><%= statusLabel %></span>
+                                </td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-primary payment-btn" data-sale-id="<%= sale._id %>" data-sale-amount="<%= sale.totalAmount %>" data-current-status="<%= paymentStatus %>" data-paid-amount="<%= sale.paidAmount || 0 %>">
+                                        Update Payment
+                                    </button>
+                                </td>
+                            </tr>
+                        <% }); %>
+                    </tbody>
+                </table>
+            <% } else { %>
+                <p class="text-muted text-center py-4">No sales history</p>
+            <% } %>
+        </div>
+    </div>
+
+    <!-- Payment Update Modal -->
+    <div class="modal fade" id="paymentModal" tabindex="-1" aria-labelledby="paymentModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="paymentModalLabel">Update Payment</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="paymentError" class="alert alert-danger d-none"></div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label"><strong>Sale Amount</strong></label>
+                        <div class="input-group">
+                            <span class="input-group-text">₹</span>
+                            <input type="text" class="form-control" id="saleAmount" disabled>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label"><strong>Amount Paid</strong></label>
+                        <div class="input-group">
+                            <span class="input-group-text">₹</span>
+                            <input type="number" class="form-control" id="paidAmount" step="0.01" min="0" placeholder="Enter amount paid">
+                        </div>
+                        <small class="form-text text-muted">Enter the total amount paid so far</small>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label"><strong>Remaining Amount</strong></label>
+                        <div class="input-group">
+                            <span class="input-group-text">₹</span>
+                            <input type="text" class="form-control" id="remainingAmount" disabled>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label"><strong>Payment Status</strong></label>
+                        <div id="statusIndicator" class="alert mb-0" role="alert"></div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="savePaymentBtn">Save Payment</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const paymentModal = new bootstrap.Modal(document.getElementById('paymentModal'));
+        const saleAmountInput = document.getElementById('saleAmount');
+        const paidAmountInput = document.getElementById('paidAmount');
+        const remainingAmountInput = document.getElementById('remainingAmount');
+        const statusIndicator = document.getElementById('statusIndicator');
+        const paymentError = document.getElementById('paymentError');
+        const savePaymentBtn = document.getElementById('savePaymentBtn');
+        
+        let currentSaleId = null;
+
+        // Calculate remaining amount and update status indicator
+        paidAmountInput.addEventListener('input', () => {
+            const saleAmount = parseFloat(saleAmountInput.value) || 0;
+            const paidAmount = parseFloat(paidAmountInput.value) || 0;
+            const remaining = Math.max(0, saleAmount - paidAmount);
+            
+            remainingAmountInput.value = remaining.toFixed(2);
+            
+            // Update status indicator
+            let status = 'Unpaid';
+            let statusClass = 'alert-danger';
+            
+            if (paidAmount > 0) {
+                if (paidAmount >= saleAmount) {
+                    status = 'Fully Paid ✓';
+                    statusClass = 'alert-success';
+                } else {
+                    status = 'Partially Paid ◐';
+                    statusClass = 'alert-warning';
+                }
+            }
+            
+            statusIndicator.textContent = status;
+            statusIndicator.className = `alert mb-0 ${statusClass}`;
+        });
+
+        // Handle payment button click
+        document.querySelectorAll('.payment-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const saleId = btn.dataset.saleId;
+                const saleAmount = parseFloat(btn.dataset.saleAmount) || 0;
+                const paidAmount = parseFloat(btn.dataset.paidAmount) || 0;
+                
+                currentSaleId = saleId;
+                
+                // Reset and populate modal
+                paymentError.classList.add('d-none');
+                saleAmountInput.value = saleAmount.toFixed(2);
+                paidAmountInput.value = paidAmount.toFixed(2);
+                
+                // Trigger input event to calculate remaining amount
+                paidAmountInput.dispatchEvent(new Event('input'));
+                
+                paymentModal.show();
+            });
+        });
+
+        // Save payment
+        savePaymentBtn.addEventListener('click', async () => {
+            if (!currentSaleId) return;
+            
+            const saleAmount = parseFloat(saleAmountInput.value) || 0;
+            const paidAmount = parseFloat(paidAmountInput.value) || 0;
+            
+            // Validate
+            if (paidAmount < 0) {
+                paymentError.textContent = 'Paid amount cannot be negative';
+                paymentError.classList.remove('d-none');
+                return;
+            }
+            
+            if (paidAmount > saleAmount) {
+                paymentError.textContent = 'Paid amount cannot exceed sale amount';
+                paymentError.classList.remove('d-none');
+                return;
+            }
+            
+            // Determine status
+            let paymentStatus = 'unpaid';
+            if (paidAmount > 0) {
+                paymentStatus = paidAmount >= saleAmount ? 'paid' : 'partial';
+            }
+            
+            try {
+                const res = await fetch(`/sales/${currentSaleId}/payment-status`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        paymentStatus,
+                        paidAmount
+                    })
+                });
+                
+                if (!res.ok) {
+                    const err = await res.json();
+                    throw new Error(err.error || 'Failed to update payment');
+                }
+                
+                paymentModal.hide();
+                location.reload();
+            } catch (err) {
+                paymentError.textContent = 'Error: ' + err.message;
+                paymentError.classList.remove('d-none');
+            }
+        });
+    </script>
+</body>
+</html>
