@@ -108,29 +108,7 @@ router.get('/register', (req, res) => {
   res.render('register');
 });
 
-// Add this route (remove after running)
-router.get('/admin/migrate-categories', async (req, res) => {
-  try {
-    const Product = require('../models/product');
-    
-    const result = await Product.updateMany(
-      { category: { $exists: false } },
-      { $set: { category: 'Glass' } }
-    );
-    
-    const result2 = await Product.updateMany(
-      { $or: [{ category: null }, { category: '' }] },
-      { $set: { category: 'Glass' } }
-    );
-    
-    res.json({ 
-      message: 'Migration complete', 
-      updated: result.modifiedCount + result2.modifiedCount 
-    });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+
 
 // Register User
 router.post('/register', async (req, res) => {
