@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 const Product = require('../models/product');
 
 // Connect to MongoDB
-const dbUrl = process.env.MONGODB_URI || 'mongodb://localhost:27017/shyam_polycom';
+const dbUrl = mongodb+srv://rprashant264_db_user:R57pLoNPxUVIHo3j@cluster0.bixhvvz.mongodb.net/?appName=Cluster0;
 
 async function updateProductCategories() {
   try {
