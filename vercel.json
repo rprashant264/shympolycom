@@ -1,6 +1,5 @@
 {
   "version": 2,
-  "buildCommand": "node scripts/updateProductCategories.js",
   "builds": [
     {
       "src": "app.js",
