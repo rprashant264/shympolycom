@@ -31,7 +31,17 @@ const saleSchema = new mongoose.Schema({
   date: { type: Date, required: true, default: Date.now },
   lineItems: [saleLineItemSchema],
   totalAmount: { type: Number, required: true, default: 0 },
-  totalUnits: { type: Number, required: true, default: 0 }
+  totalUnits: { type: Number, required: true, default: 0 },
+  paymentStatus: {
+    type: String,
+    enum: ['unpaid', 'partial', 'paid'],
+    default: 'unpaid'
+  },
+  paidAmount: {
+    type: Number,
+    default: 0,
+    min: 0
+  }
 }, { timestamps: true });
 
 
@@ -85,13 +95,6 @@ saleSchema.pre('save', async function (next) {
       const product = await Product.findById(item.productRef);
       if (!product) {
         return next(new Error(`Product ${item.productName} not found`));
-      }
-      if (product.stock < item.units) {
-        return next(
-          new Error(
-            `Insufficient stock for ${item.productName}. Available: ${product.stock}, Requested: ${item.units}`
-          )
-        );
       }
     }
 
