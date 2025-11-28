@@ -44,6 +44,7 @@
           <tr>
             <th>HSN Code</th>
             <th>Product Name</th>
+            <th>Category</th>
             <th>Weight</th>
             <th>Cost</th>
             <th>Selling Price</th>
@@ -57,7 +58,8 @@
               <tr data-id="<%= p._id %>">
                 <td><%= p.hsnCode %></td>
                 <td><%= p.productName %></td>
-                <td><%= p.productWeight %></td>
+                <td><%= p.category %></td>
+                <td><%= (p.category === 'Other disposables') ? 'Nil' : (p.productWeight || 'Nil') %></td>
                 <td>₹<%= Number(p.cost).toFixed(2) %></td>
                 <td>₹<%= Number(p.sellingPrice).toFixed(2) %></td>
                 <td><%= p.stock %></td>
@@ -94,8 +96,17 @@
             <input name="productName" class="form-control" required />
           </div>
           <div class="mb-3">
-            <label class="form-label">Product Weight</label>
-            <input name="productWeight" class="form-control" required />
+            <label class="form-label">Category</label>
+            <select name="category" class="form-control category-select" required>
+              <option value="">-- Select Category --</option>
+              <option value="Glass">Glass</option>
+              <option value="MS Casting">MS Casting</option>
+              <option value="Other disposables">Other disposables</option>
+            </select>
+          </div>
+          <div class="mb-3 weight-field">
+            <label class="form-label">Product Weight <span class="text-danger">*</span></label>
+            <input name="productWeight" class="form-control" type="number" step="0.01" />
           </div>
           <div class="mb-3">
             <label class="form-label">Cost</label>
@@ -139,8 +150,17 @@
             <input name="productName" class="form-control" required />
           </div>
           <div class="mb-3">
-            <label class="form-label">Product Weight</label>
-            <input name="productWeight" class="form-control" required />
+            <label class="form-label">Category</label>
+            <select name="category" class="form-control category-select" required>
+              <option value="">-- Select Category --</option>
+              <option value="Glass">Glass</option>
+              <option value="MS Casting">MS Casting</option>
+              <option value="Other disposables">Other disposables</option>
+            </select>
+          </div>
+          <div class="mb-3 weight-field">
+            <label class="form-label">Product Weight <span class="text-danger">*</span></label>
+            <input name="productWeight" class="form-control" type="number" step="0.01" />
           </div>
           <div class="mb-3">
             <label class="form-label">Cost</label>
@@ -179,12 +199,44 @@
     // Store original rows for search functionality
     let originalRows = [...tbody.querySelectorAll('tr')];
 
+    // Function to toggle weight field based on category
+    function toggleWeightField(form) {
+      const categorySelect = form.querySelector('[name="category"]');
+      const weightField = form.querySelector('.weight-field');
+      const weightInput = form.querySelector('[name="productWeight"]');
+      
+      function updateWeightVisibility() {
+        if (categorySelect.value === 'Other disposables') {
+          weightField.style.display = 'none';
+          weightInput.removeAttribute('required');
+        } else if (categorySelect.value === 'Glass' || categorySelect.value === 'MS Casting') {
+          weightField.style.display = 'block';
+          weightInput.setAttribute('required', 'required');
+        }
+      }
+      
+      // Update on load
+      updateWeightVisibility();
+      
+      // Update on change
+      categorySelect.addEventListener('change', updateWeightVisibility);
+    }
+
+    // Apply weight field toggle to both forms
+    toggleWeightField(addProductForm);
+    toggleWeightField(editProductForm);
+
     // Handle form submission for new product
     addProductForm.addEventListener('submit', async (e) => {
       e.preventDefault();
       
       const formData = new FormData(addProductForm);
       const data = Object.fromEntries(formData);
+      
+      // Convert empty weight to 0 for Other disposables category
+      if (data.category === 'Other disposables' && !data.productWeight) {
+        data.productWeight = 0;
+      }
 
       try {
         const response = await fetch('/products', {
@@ -205,10 +257,12 @@
         // Add new row to table
         const row = document.createElement('tr');
         row.dataset.id = newProduct._id;
+        const weightDisplay = (newProduct.category === 'Other disposables') ? 'Nil' : (newProduct.productWeight || 'Nil');
         row.innerHTML = `
           <td>${newProduct.hsnCode}</td>
           <td>${newProduct.productName}</td>
-          <td>${newProduct.productWeight}</td>
+          <td>${newProduct.category}</td>
+          <td>${weightDisplay}</td>
           <td>₹${Number(newProduct.cost).toFixed(2)}</td>
           <td>₹${Number(newProduct.sellingPrice).toFixed(2)}</td>
           <td>${newProduct.stock}</td>
@@ -252,10 +306,23 @@
         form.querySelector('[name="productId"]').value = id;
         form.querySelector('[name="hsnCode"]').value = cells[0].textContent;
         form.querySelector('[name="productName"]').value = cells[1].textContent;
-        form.querySelector('[name="productWeight"]').value = cells[2].textContent;
-        form.querySelector('[name="cost"]').value = cells[3].textContent.replace('₹', '');
-        form.querySelector('[name="sellingPrice"]').value = cells[4].textContent.replace('₹', '');
-       form.querySelector('[name="stock"]').value = cells[5].textContent;
+        form.querySelector('[name="category"]').value = cells[2].textContent;
+        form.querySelector('[name="productWeight"]').value = cells[3].textContent;
+        form.querySelector('[name="cost"]').value = cells[4].textContent.replace('₹', '');
+        form.querySelector('[name="sellingPrice"]').value = cells[5].textContent.replace('₹', '');
+       form.querySelector('[name="stock"]').value = cells[6].textContent;
+        
+        // Update weight field visibility based on selected category
+        const categorySelect = form.querySelector('[name="category"]');
+        const weightField = form.querySelector('.weight-field');
+        const weightInput = form.querySelector('[name="productWeight"]');
+        if (categorySelect.value === 'Other disposables') {
+          weightField.style.display = 'none';
+          weightInput.removeAttribute('required');
+        } else if (categorySelect.value === 'Glass' || categorySelect.value === 'MS Casting') {
+          weightField.style.display = 'block';
+          weightInput.setAttribute('required', 'required');
+        }
         
         const editModal = new bootstrap.Modal(editProductModal);
         editModal.show();
@@ -288,6 +355,11 @@
       const id = formData.get('productId');
       const data = Object.fromEntries(formData);
       delete data.productId;
+      
+      // Convert empty weight to 0 for Other disposables category
+      if (data.category === 'Other disposables' && !data.productWeight) {
+        data.productWeight = 0;
+      }
 
       try {
         const response = await fetch(`/products/${id}`, {
@@ -308,10 +380,12 @@
         // Update the row in the table
         const row = tbody.querySelector(`tr[data-id="${id}"]`);
         if (row) {
+          const weightDisplay = (updatedProduct.category === 'Other disposables') ? 'Nil' : (updatedProduct.productWeight || 'Nil');
           row.innerHTML = `
             <td>${updatedProduct.hsnCode}</td>
             <td>${updatedProduct.productName}</td>
-            <td>${updatedProduct.productWeight}</td>
+            <td>${updatedProduct.category}</td>
+            <td>${weightDisplay}</td>
             <td>₹${Number(updatedProduct.cost).toFixed(2)}</td>
             <td>₹${Number(updatedProduct.sellingPrice).toFixed(2)}</td>
              <td>${updatedProduct.stock}</td>
