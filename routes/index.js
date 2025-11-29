@@ -18,7 +18,7 @@ const Gatepass = require('../models/gatepass');
 
 // Home Page (Public)
 router.get('/', (req, res) => {
-  res.render('index', { title: 'My App' });
+  res.render('login', { title: 'My App' });
 });
 
 // Dashboard / Home (Protected)
@@ -105,7 +105,7 @@ const lowStockProducts = await Product.find({ stock: { $lt: 10 } })
 
 // Registration Page
 router.get('/register', (req, res) => {
-  res.render('register');
+  res.render('index');
 });
 
 
